@@ -376,52 +376,50 @@ function calculateIntersections() {
     let foundTargets = [];
     const MAX_TARGETS = 10;
     
+    // Seřadíme měření podle času (nejnovější mají prioritu, pokud by se cíle hýbaly)
+    currentMeasurements.sort((a, b) => b.timestamp - a.timestamp);
+
     for (let t = 0; t < MAX_TARGETS; t++) {
         if (currentMeasurements.length < 3) break;
         
-        let allIntersections = [];
+        let candidates = [];
+        // Generujeme kandidáty ze všech možných trojic zbývajících měření
         for (let i = 0; i < currentMeasurements.length; i++) {
             for (let j = i + 1; j < currentMeasurements.length; j++) {
                 for (let k = j + 1; k < currentMeasurements.length; k++) {
                     const pts = getSphereIntersections(currentMeasurements[i], currentMeasurements[j], currentMeasurements[k]);
                     if (pts) {
                         pts.forEach(p => {
-                            if (p.y >= -64 && p.y <= 320) allIntersections.push(p);
+                            if (p.y >= -64 && p.y <= 320) {
+                                // Validace kandidáta: kolik měření (i těch již "použitých") tento bod potvrzuje?
+                                let support = 0;
+                                measurements.forEach(m => {
+                                    const d = Math.sqrt(Math.pow(p.x-m.x,2)+Math.pow(p.y-m.y,2)+Math.pow(p.z-m.z,2));
+                                    if (Math.abs(d - m.r) < 5) support++;
+                                });
+                                candidates.push({...p, support});
+                            }
                         });
                     }
                 }
             }
         }
         
-        if (allIntersections.length === 0) break;
+        if (candidates.length === 0) break;
         
-        const clusters = [];
-        allIntersections.forEach(p => {
-            let added = false;
-            for (let c of clusters) {
-                const dist = Math.sqrt(Math.pow(p.x-c.x,2)+Math.pow(p.y-c.y,2)+Math.pow(p.z-c.z,2));
-                if (dist < 15) { // Mírně zvýšeno pro dataset 10 bodů
-                    c.pts.push(p);
-                    c.x = c.pts.reduce((s,pt)=>s+pt.x,0)/c.pts.length;
-                    c.y = c.pts.reduce((s,pt)=>s+pt.y,0)/c.pts.length;
-                    c.z = c.pts.reduce((s,pt)=>s+pt.z,0)/c.pts.length;
-                    added = true; break;
-                }
-            }
-            if (!added) clusters.push({x:p.x, y:p.y, z:p.z, pts:[p]});
-        });
+        // Vybereme kandidáta s nejvyšší podporou (Consistency Check)
+        candidates.sort((a, b) => b.support - a.support);
+        const best = candidates[0];
         
-        clusters.sort((a,b) => b.pts.length - a.pts.length);
-        const best = clusters[0];
-        
-        if (best.pts.length < 2) break;
+        // Pokud bod potvrzují alespoň 3 měření, bereme ho jako cíl
+        if (best.support < 3) break;
         
         foundTargets.push({
             x: best.x, y: best.y, z: best.z,
-            confidence: best.pts.length
+            confidence: best.support
         });
         
-        // Successive Cancellation
+        // Successive Cancellation: Odstraníme měření, která tento cíl vysvětluje
         currentMeasurements = currentMeasurements.filter(m => {
             const dist = Math.sqrt(Math.pow(m.x-best.x,2)+Math.pow(m.y-best.y,2)+Math.pow(m.z-best.z,2));
             return Math.abs(dist - m.r) > 5;
