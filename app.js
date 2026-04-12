@@ -357,12 +357,11 @@ function calculateIntersections() {
         }
     }
     const clusters = [];
-    const DISTANCE_THRESHOLD = 10; 
+    const DISTANCE_THRESHOLD = 8; 
     allIntersections.forEach(p => {
         let addedToCluster = false;
         for (let cluster of clusters) {
             const center = cluster.center;
-            // Shlukování provádíme v 3D
             const dist = Math.sqrt(
                 Math.pow(p.x - center.x, 2) + 
                 Math.pow(p.y - center.y, 2) + 
@@ -383,17 +382,23 @@ function calculateIntersections() {
             clusters.push({ center: { x: p.x, y: p.y, z: p.z }, points: [p] });
         }
     });
-    intersections = clusters.map(c => ({
-        x: c.center.x,
-        y: c.center.y,
-        z: c.center.z,
-        confidence: c.points.length,
-        isMajor: c.points.length > 1
-    })).sort((a, b) => b.confidence - a.confidence);
+
+    // Filtrování šumu: Potřebujeme alespoň několik shod pro zobrazení bodu
+    const minConfidence = Math.max(2, Math.floor(measurements.length / 4));
+
+    intersections = clusters
+        .map(c => ({
+            x: c.center.x,
+            y: c.center.y,
+            z: c.center.z,
+            confidence: c.points.length,
+            isMajor: c.points.length >= minConfidence * 2
+        }))
+        .filter(p => p.confidence >= minConfidence)
+        .sort((a, b) => b.confidence - a.confidence);
 }
 
 function getSphereIntersections(p1, p2, p3) {
-    // Vektory mezi středy sfér
     const P1 = { x: p1.x, y: p1.y || 0, z: p1.z };
     const P2 = { x: p2.x, y: p2.y || 0, z: p2.z };
     const P3 = { x: p3.x, y: p3.y || 0, z: p3.z };
@@ -401,39 +406,32 @@ function getSphereIntersections(p1, p2, p3) {
     const r2 = p2.r;
     const r3 = p3.r;
 
-    // ex = (P2 - P1) / |P2 - P1|
     const dvec = { x: P2.x - P1.x, y: P2.y - P1.y, z: P2.z - P1.z };
     const d = Math.sqrt(dvec.x * dvec.x + dvec.y * dvec.y + dvec.z * dvec.z);
     if (d === 0) return null;
     const ex = { x: dvec.x / d, y: dvec.y / d, z: dvec.z / d };
 
-    // i = ex . (P3 - P1)
     const p3p1 = { x: P3.x - P1.x, y: P3.y - P1.y, z: P3.z - P1.z };
     const i = ex.x * p3p1.x + ex.y * p3p1.y + ex.z * p3p1.z;
 
-    // ey = (P3 - P1 - i*ex) / |P3 - P1 - i*ex|
     const eyvec = { x: p3p1.x - i * ex.x, y: p3p1.y - i * ex.y, z: p3p1.z - i * ex.z };
     const j = Math.sqrt(eyvec.x * eyvec.x + eyvec.y * eyvec.y + eyvec.z * eyvec.z);
     if (j === 0) return null;
     const ey = { x: eyvec.x / j, y: eyvec.y / j, z: eyvec.z / j };
 
-    // ez = ex x ey
     const ez = {
         x: ex.y * ey.z - ex.z * ey.y,
         y: ex.z * ey.x - ex.x * ey.z,
         z: ex.x * ey.y - ex.y * ey.x
     };
 
-    // x = (r1^2 - r2^2 + d^2) / 2d
     const x = (r1 * r1 - r2 * r2 + d * d) / (2 * d);
-    // y = (r1^2 - r3^2 + i^2 + j^2) / 2j - (i/j) * x
     const y = (r1 * r1 - r3 * r3 + i * i + j * j) / (2 * j) - (i / j) * x;
 
     const zSquared = r1 * r1 - x * x - y * y;
-    if (zSquared < 0) return null; // Sféry se neprotínají ve všech třech bodech
-    const z = Math.sqrt(zSquared);
+    if (zSquared < -0.5) return null; // Tolerance pro zaokrouhlovací chyby
+    const z = Math.sqrt(Math.max(0, zSquared));
 
-    // P = P1 + x*ex + y*ey +- z*ez
     const result1 = {
         x: P1.x + x * ex.x + y * ey.x + z * ez.x,
         y: P1.y + x * ex.y + y * ey.y + z * ez.y,
