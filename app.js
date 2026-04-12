@@ -325,6 +325,7 @@ function renderSVG() {
         point.setAttribute("cy", toCoord(m.z));
         point.setAttribute("r", "3.5");
         point.setAttribute("class", "svg-player-point");
+        point.style.fill = 'var(--danger)'; // Explicitly set color
         layers.players.appendChild(point);
     });
 }
