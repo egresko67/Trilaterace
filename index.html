@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trilaterace - Minecraft POI Finder</title>
-    <link rel="stylesheet" href="style.css?v=1.1">
+    <title>Egg Finder - Minecraft POI</title>
+    <link rel="stylesheet" href="style.css?v=1.2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -14,11 +14,11 @@
         <aside class="sidebar">
             <header class="app-header">
                 <div class="logo">
-                    <span class="icon">🎯</span>
-                    <h1>Trilaterace</h1>
+                    <span class="icon">🥚</span>
+                    <h1>Egg Finder</h1>
                 </div>
                 <div class="status-bar">
-                    <span id="current-date" class="date-tag">2026-04-12</span>
+                    <span id="current-date" class="date-tag">-----</span>
                     <span class="reset-timer">Reset za <span id="time-to-reset">--:--</span></span>
                 </div>
             </header>
@@ -43,7 +43,7 @@
                         <div class="form-group">
                             <label for="radius">Vzdálenost (Radius)</label>
                             <div class="input-with-unit">
-                                <input type="number" id="radius" required min="0" step="0.1" placeholder="Vzdálenost k POI">
+                                <input type="number" id="radius" required min="0" step="0.1" placeholder="Vzdálenost k cíli">
                                 <span class="unit">bloků</span>
                             </div>
                         </div>
@@ -62,7 +62,7 @@
                         </div>
                         <div class="stat-item">
                             <span class="stat-value">10</span>
-                            <span class="stat-label">Cílů POI</span>
+                            <span class="stat-label">Cílů</span>
                         </div>
                     </div>
                 </div>
@@ -99,7 +99,7 @@
                         <span class="legend-item"><i class="player"></i> Pozice</span>
                     </div>
                 </div>
-                <div class="canvas-container">
+                <div class="canvas-container" id="canvas-container">
                     <canvas id="map-canvas"></canvas>
                     <div id="hover-info" class="hover-tooltip"></div>
                 </div>
@@ -116,6 +116,6 @@
       }
     }
     </script>
-    <script type="module" src="app.js"></script>
+    <script type="module" src="app.js?v=1.2"></script>
 </body>
 </html>
