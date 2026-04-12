@@ -257,6 +257,15 @@ function renderSVG() {
         layers.circles.appendChild(c);
     });
 
+    layers.players.innerHTML = '';
+    measurements.forEach(m => {
+        const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        c.setAttribute("cx", toCoord(m.x)); c.setAttribute("cy", toCoord(m.z));
+        c.setAttribute("r", 3); c.setAttribute("class", "svg-player-point");
+        c.style.fill = "var(--danger)"; c.style.stroke = "white"; c.style.strokeWidth = "1";
+        layers.players.appendChild(c);
+    });
+
     layers.intersections.innerHTML = '';
     intersections.forEach(p => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
