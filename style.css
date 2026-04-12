@@ -248,16 +248,50 @@ td {
 }
 
 .btn-del-small {
-    background: none;
-    border: none;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
     color: var(--danger);
     cursor: pointer;
-    font-size: 1rem;
-    opacity: 0.6;
+    font-size: 0.75rem;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
 }
 
 .btn-del-small:hover {
-    opacity: 1;
+    background: var(--danger);
+    color: white;
+}
+
+.mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+}
+
+/* Tooltip */
+.hover-tooltip {
+    position: absolute;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    pointer-events: none;
+    display: none;
+    z-index: 100;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    color: white;
+}
+
+.hover-tooltip strong {
+    color: var(--accent);
+    display: block;
+    margin-bottom: 4px;
 }
 
 /* Main Content */

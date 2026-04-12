@@ -18,6 +18,7 @@ const db = getDatabase(app);
 
 // --- STAV APLIKACE ---
 let measurements = [];
+let intersections = [];
 const MAP_SIZE = 400;
 const OFFSET = 200; 
 
@@ -33,6 +34,7 @@ const timeToResetSpan = document.getElementById('time-to-reset');
 const canvas = document.getElementById('map-canvas');
 const ctx = canvas.getContext('2d');
 const resetViewBtn = document.getElementById('reset-view');
+const hoverInfo = document.getElementById('hover-info');
 
 // --- POMOCNÉ FUNKCE ---
 
@@ -63,6 +65,11 @@ function toCanvas(coord) {
     return (parseFloat(coord) + OFFSET) * scale;
 }
 
+function fromCanvas(pixel) {
+    const scale = MAP_SIZE / canvas.width;
+    return (pixel * scale) - OFFSET;
+}
+
 function resizeCanvas() {
     const container = canvas.parentElement;
     const size = Math.min(container.clientWidth, container.clientHeight);
@@ -80,6 +87,7 @@ function loadData() {
     onValue(dataRef, (snapshot) => {
         const data = snapshot.val();
         measurements = data ? Object.entries(data).map(([id, val]) => ({ id, ...val })) : [];
+        calculateIntersections();
         updateUI();
         render();
     });
@@ -169,7 +177,6 @@ function render() {
         const cz = toCanvas(m.z);
         const cr = m.r * (canvas.width / MAP_SIZE);
 
-        // Gradient for circles
         const grad = ctx.createRadialGradient(cx, cz, 0, cx, cz, cr);
         grad.addColorStop(0, 'rgba(56, 189, 248, 0)');
         grad.addColorStop(1, 'rgba(56, 189, 248, 0.1)');
@@ -182,7 +189,6 @@ function render() {
         ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // Player dot
         ctx.beginPath();
         ctx.arc(cx, cz, 4, 0, Math.PI * 2);
         ctx.fillStyle = '#ef4444';
@@ -195,23 +201,25 @@ function render() {
     drawIntersections();
 }
 
-function drawIntersections() {
+function calculateIntersections() {
+    intersections = [];
     if (measurements.length < 2) return;
 
-    const intersections = [];
     for (let i = 0; i < measurements.length; i++) {
         for (let j = i + 1; j < measurements.length; j++) {
             const pts = getCircleIntersections(measurements[i], measurements[j]);
             if (pts) intersections.push(...pts);
         }
     }
+}
 
+function drawIntersections() {
     intersections.forEach(p => {
         const px = toCanvas(p.x);
         const pz = toCanvas(p.z);
         
         ctx.beginPath();
-        ctx.arc(px, pz, 5, 0, Math.PI * 2);
+        ctx.arc(px, pz, 6, 0, Math.PI * 2);
         ctx.fillStyle = '#f59e0b';
         ctx.shadowBlur = 15;
         ctx.shadowColor = '#f59e0b';
@@ -219,7 +227,7 @@ function drawIntersections() {
         ctx.shadowBlur = 0;
         
         ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 1.5;
         ctx.stroke();
     });
 }
@@ -244,6 +252,36 @@ function getCircleIntersections(c1, c2) {
         { x: x2 - rx, z: z2 - rz }
     ];
 }
+
+// --- INTERAKCE ---
+
+canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    
+    let found = false;
+    for (const p of intersections) {
+        const px = toCanvas(p.x);
+        const pz = toCanvas(p.z);
+        const dist = Math.sqrt((mx - px)**2 + (my - pz)**2);
+        
+        if (dist < 10) {
+            hoverInfo.style.display = 'block';
+            hoverInfo.style.left = `${mx + 15}px`;
+            hoverInfo.style.top = `${my + 15}px`;
+            hoverInfo.innerHTML = `<strong>Odhad vejce</strong><br>X: ${p.x.toFixed(1)}<br>Z: ${p.z.toFixed(1)}`;
+            canvas.style.cursor = 'crosshair';
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found) {
+        hoverInfo.style.display = 'none';
+        canvas.style.cursor = 'default';
+    }
+};
 
 // --- INICIALIZACE ---
 
