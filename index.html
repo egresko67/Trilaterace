@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Trilaterace - Therapie</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Trilaterace - Therapie</h1>
+            <p>Dnešní datum: <span id="current-date"></span></p>
+        </header>
+
+        <main>
+            <section class="controls">
+                <div class="card">
+                    <h2>Přidat měření</h2>
+                    <form id="measurement-form">
+                        <div class="form-group">
+                            <label for="x-coord">Pozice X:</label>
+                            <input type="number" id="x-coord" required step="0.1" placeholder="Např. 120">
+                        </div>
+                        <div class="form-group">
+                            <label for="z-coord">Pozice Z:</label>
+                            <input type="number" id="z-coord" required step="0.1" placeholder="Např. -45">
+                        </div>
+                        <div class="form-group">
+                            <label for="radius">Vzdálenost (R):</label>
+                            <input type="number" id="radius" required min="0" step="0.1" placeholder="Vzdálenost k cíli">
+                        </div>
+                        <button type="submit" id="submit-btn">Odeslat</button>
+                    </form>
+                </div>
+
+                <div class="card info-card">
+                    <h2>Statistiky</h2>
+                    <p>Počet měření: <span id="count">0</span></p>
+                    <p>Hledaných bodů: 10</p>
+                    <p class="reset-note">Reset o půlnoci proběhne automaticky.</p>
+                </div>
+            </section>
+
+            <section class="visualization">
+                <div class="canvas-container">
+                    <canvas id="map-canvas"></canvas>
+                </div>
+            </section>
+
+            <section class="data-list">
+                <div class="card">
+                    <h2>Seznam měření</h2>
+                    <div class="table-scroll">
+                        <table id="measurements-table">
+                            <thead>
+                                <tr>
+                                    <th>X</th>
+                                    <th>Z</th>
+                                    <th>R</th>
+                                    <th>Čas</th>
+                                    <th>Akce</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Data se vloží sem -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Firebase SDK (Modular) -->
+    <script type="importmap">
+    {
+      "imports": {
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js",
+        "firebase/database": "https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js"
+      }
+    }
+    </script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
