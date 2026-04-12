@@ -12,7 +12,6 @@ const firebaseConfig = {
   appId: "1:542609606032:web:b9fa594544d7e429f15f15"
 };
 
-// Inicializace Firebase
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
@@ -31,9 +30,13 @@ const tableBody = document.querySelector('#measurements-table tbody');
 const countSpan = document.getElementById('count');
 const dateSpan = document.getElementById('current-date');
 const timeToResetSpan = document.getElementById('time-to-reset');
-const canvas = document.getElementById('map-canvas');
-const ctx = canvas.getContext('2d');
-const resetViewBtn = document.getElementById('reset-view');
+const svg = document.getElementById('map-svg');
+const layers = {
+    grid: document.getElementById('svg-grid-layer'),
+    circles: document.getElementById('svg-circles-layer'),
+    intersections: document.getElementById('svg-intersections-layer'),
+    players: document.getElementById('svg-players-layer')
+};
 const hoverInfo = document.getElementById('hover-info');
 
 // --- POMOCNÉ FUNKCE ---
@@ -60,17 +63,8 @@ function updateResetTimer() {
     timeToResetSpan.textContent = `${hours}h ${minutes}m`;
 }
 
-function toCanvas(coord) {
-    const scale = canvas.width / MAP_SIZE;
-    return (parseFloat(coord) + OFFSET) * scale;
-}
-
-function resizeCanvas() {
-    const container = canvas.parentElement;
-    const size = Math.min(container.clientWidth, container.clientHeight);
-    canvas.width = size;
-    canvas.height = size;
-    render();
+function toCoord(val) {
+    return parseFloat(val) + OFFSET;
 }
 
 // --- LOGIKA DAT ---
@@ -84,7 +78,7 @@ function loadData() {
         measurements = data ? Object.entries(data).map(([id, val]) => ({ id, ...val })) : [];
         calculateIntersections();
         updateUI();
-        render();
+        renderSVG();
     });
 }
 
@@ -138,62 +132,67 @@ form.onsubmit = async (e) => {
     }
 };
 
-// --- RENDER OVÁNÍ ---
+// --- RENDER OVÁNÍ (SVG) ---
 
-function render() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+function renderSVG() {
+    // 1. Grid layer (static part, can be cached but for simplicity we redraw)
+    layers.grid.innerHTML = '';
+    const step = 50; 
+    for (let i = 0; i <= 400; i += step) {
+        // Vertical lines
+        const vLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        vLine.setAttribute("x1", i); vLine.setAttribute("y1", 0);
+        vLine.setAttribute("x2", i); vLine.setAttribute("y2", 400);
+        vLine.setAttribute("class", i === 200 ? "svg-axis-line" : "svg-grid-line");
+        layers.grid.appendChild(vLine);
 
-    // Grid
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 1;
-    const step = canvas.width / 8; 
-    for (let i = 0; i <= canvas.width; i += step) {
-        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
+        // Horizontal lines
+        const hLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        hLine.setAttribute("x1", 0); hLine.setAttribute("y1", i);
+        hLine.setAttribute("x2", 400); hLine.setAttribute("y2", i);
+        hLine.setAttribute("class", i === 200 ? "svg-axis-line" : "svg-grid-line");
+        layers.grid.appendChild(hLine);
     }
 
-    // Axes
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(canvas.width / 2, 0); ctx.lineTo(canvas.width / 2, canvas.height); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, canvas.height / 2); ctx.lineTo(canvas.width, canvas.height / 2); ctx.stroke();
-
-    // Coordinates labels
-    ctx.fillStyle = '#475569';
-    ctx.font = '10px JetBrains Mono';
-    ctx.fillText("-200", 5, canvas.height / 2 - 5);
-    ctx.fillText("200", canvas.width - 25, canvas.height / 2 - 5);
-    ctx.fillText("-200", canvas.width / 2 + 5, 15);
-    ctx.fillText("200", canvas.width / 2 + 5, canvas.height - 5);
-
-    // Circles
+    // 2. Circles layer
+    layers.circles.innerHTML = '';
     measurements.forEach(m => {
-        const cx = toCanvas(m.x);
-        const cz = toCanvas(m.z);
-        const cr = m.r * (canvas.width / MAP_SIZE);
-
-        const grad = ctx.createRadialGradient(cx, cz, 0, cx, cz, cr);
-        grad.addColorStop(0, 'rgba(56, 189, 248, 0)');
-        grad.addColorStop(1, 'rgba(56, 189, 248, 0.1)');
-
-        ctx.beginPath();
-        ctx.arc(cx, cz, cr, 0, Math.PI * 2);
-        ctx.fillStyle = grad;
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.arc(cx, cz, 4, 0, Math.PI * 2);
-        ctx.fillStyle = '#ef4444';
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = '#ef4444';
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("cx", toCoord(m.x));
+        circle.setAttribute("cy", toCoord(m.z));
+        circle.setAttribute("r", m.r);
+        circle.setAttribute("fill", "url(#circle-grad)");
+        circle.setAttribute("stroke", "rgba(56, 189, 248, 0.4)");
+        circle.setAttribute("stroke-width", "1.5");
+        layers.circles.appendChild(circle);
     });
 
-    drawIntersections();
+    // 3. Intersections layer
+    layers.intersections.innerHTML = '';
+    intersections.forEach(p => {
+        const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        point.setAttribute("cx", toCoord(p.x));
+        point.setAttribute("cy", toCoord(p.z));
+        point.setAttribute("r", "5");
+        point.setAttribute("class", "svg-poi-point");
+        
+        point.addEventListener('mouseenter', (e) => showTooltip(e, p));
+        point.addEventListener('mousemove', (e) => moveTooltip(e));
+        point.addEventListener('mouseleave', () => hideTooltip());
+        
+        layers.intersections.appendChild(point);
+    });
+
+    // 4. Players layer
+    layers.players.innerHTML = '';
+    measurements.forEach(m => {
+        const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        point.setAttribute("cx", toCoord(m.x));
+        point.setAttribute("cy", toCoord(m.z));
+        point.setAttribute("r", "3.5");
+        point.setAttribute("class", "svg-player-point");
+        layers.players.appendChild(point);
+    });
 }
 
 function calculateIntersections() {
@@ -206,25 +205,6 @@ function calculateIntersections() {
             if (pts) intersections.push(...pts);
         }
     }
-}
-
-function drawIntersections() {
-    intersections.forEach(p => {
-        const px = toCanvas(p.x);
-        const pz = toCanvas(p.z);
-        
-        ctx.beginPath();
-        ctx.arc(px, pz, 6, 0, Math.PI * 2);
-        ctx.fillStyle = '#f59e0b';
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = '#f59e0b';
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-    });
 }
 
 function getCircleIntersections(c1, c2) {
@@ -248,54 +228,29 @@ function getCircleIntersections(c1, c2) {
     ];
 }
 
-// --- INTERAKCE ---
+// --- TOOLTIP ---
 
-canvas.onmousemove = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    
-    // Scale mouse coordinates to match canvas internal resolution
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    
-    const mx = (e.clientX - rect.left) * scaleX;
-    const my = (e.clientY - rect.top) * scaleY;
-    
-    let found = false;
-    for (const p of intersections) {
-        const px = toCanvas(p.x);
-        const pz = toCanvas(p.z);
-        const dist = Math.sqrt((mx - px)**2 + (my - pz)**2);
-        
-        if (dist < 10) {
-            hoverInfo.style.display = 'block';
-            
-            // Position tooltip relative to the cursor (in CSS pixels)
-            const cssMx = e.clientX - rect.left;
-            const cssMy = e.clientY - rect.top;
-            
-            hoverInfo.style.left = `${cssMx + 15}px`;
-            hoverInfo.style.top = `${cssMy + 15}px`;
-            hoverInfo.innerHTML = `<strong>Odhad vejce</strong><br>X: ${p.x.toFixed(1)}<br>Z: ${p.z.toFixed(1)}`;
-            canvas.style.cursor = 'crosshair';
-            found = true;
-            break;
-        }
-    }
-    
-    if (!found) {
-        hoverInfo.style.display = 'none';
-        canvas.style.cursor = 'default';
-    }
-};
+function showTooltip(e, p) {
+    hoverInfo.style.display = 'block';
+    hoverInfo.innerHTML = `<strong>Odhad vejce</strong><br>X: ${p.x.toFixed(1)}<br>Z: ${p.z.toFixed(1)}`;
+    moveTooltip(e);
+}
+
+function moveTooltip(e) {
+    // The tooltip is relative to the app-layout or main-content, 
+    // but the point is in the SVG. We use client coordinates.
+    hoverInfo.style.left = `${e.clientX + 15}px`;
+    hoverInfo.style.top = `${e.clientY + 15}px`;
+}
+
+function hideTooltip() {
+    hoverInfo.style.display = 'none';
+}
 
 // --- INICIALIZACE ---
 
-window.addEventListener('resize', resizeCanvas);
-resetViewBtn.onclick = resizeCanvas;
-
 updateDateDisplay();
 updateResetTimer();
-resizeCanvas();
 loadData();
 
 setInterval(() => {

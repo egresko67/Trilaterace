@@ -315,7 +315,7 @@ td {
     gap: 12px;
 }
 
-.canvas-container {
+.map-container {
     background: #000;
     border-radius: 16px;
     overflow: hidden;
@@ -325,11 +325,10 @@ td {
     flex: 1;
 }
 
-canvas {
+svg#map-svg {
     width: 100%;
     height: 100%;
     display: block;
-    image-rendering: pixelated;
 }
 
 .map-controls {
@@ -369,6 +368,47 @@ canvas {
 
 .legend-item i.poi { background: var(--accent); }
 .legend-item i.player { background: var(--danger); }
+
+/* SVG specific styling */
+.svg-grid-line {
+    stroke: #1e293b;
+    stroke-width: 0.5;
+}
+
+.svg-axis-line {
+    stroke: #334155;
+    stroke-width: 1;
+}
+
+.svg-poi-point {
+    fill: var(--accent);
+    stroke: white;
+    stroke-width: 1;
+    filter: url(#glow);
+    cursor: crosshair;
+    transition: r 0.2s;
+}
+
+.svg-poi-point:hover {
+    r: 8;
+}
+
+.svg-player-point {
+    fill: var(--danger);
+    stroke: rgba(255,255,255,0.5);
+    stroke-width: 1;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(1); opacity: 0.8; }
+}
+
+.svg-poi-point {
+    animation: pulse 2s infinite ease-in-out;
+    transform-origin: center;
+}
 
 @media (max-width: 1000px) {
     .app-layout { flex-direction: column; }
