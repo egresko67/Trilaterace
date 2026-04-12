@@ -421,10 +421,10 @@ function calculateIntersections() {
             confidence: best.pts.length
         });
         
-        // Successive Cancellation: tolerance 10 bloků
+        // Successive Cancellation
         currentMeasurements = currentMeasurements.filter(m => {
             const dist = Math.sqrt(Math.pow(m.x-best.x,2)+Math.pow(m.y-best.y,2)+Math.pow(m.z-best.z,2));
-            return Math.abs(dist - m.r) > 10;
+            return Math.abs(dist - m.r) > 5;
         });
     }
     
