@@ -189,6 +189,11 @@ function loadData() {
 }
 
 function updateUI() {
+    if (!tableBody || !targetsTableBody) {
+        console.error("UI Elementy tabulky nebyly nalezeny!");
+        return;
+    }
+
     // Tabulka měření
     tableBody.innerHTML = '';
     countSpan.textContent = measurements.length;
@@ -213,6 +218,7 @@ function updateUI() {
 
     // Tabulka cílů
     targetsTableBody.innerHTML = '';
+    console.log(`UI: Vykresluji ${intersections.length} cílů do tabulky.`);
     intersections.forEach((p, idx) => {
         const tr = document.createElement('tr');
         const color = getConfidenceColor(p.confidence);
@@ -394,7 +400,7 @@ function calculateIntersections() {
             let added = false;
             for (let c of clusters) {
                 const dist = Math.sqrt(Math.pow(p.x-c.x,2)+Math.pow(p.y-c.y,2)+Math.pow(p.z-c.z,2));
-                if (dist < 12) {
+                if (dist < 15) { // Mírně zvýšeno pro dataset 10 bodů
                     c.pts.push(p);
                     c.x = c.pts.reduce((s,pt)=>s+pt.x,0)/c.pts.length;
                     c.y = c.pts.reduce((s,pt)=>s+pt.y,0)/c.pts.length;
@@ -415,7 +421,7 @@ function calculateIntersections() {
             confidence: best.pts.length
         });
         
-        // Successive Cancellation
+        // Successive Cancellation: tolerance 10 bloků
         currentMeasurements = currentMeasurements.filter(m => {
             const dist = Math.sqrt(Math.pow(m.x-best.x,2)+Math.pow(m.y-best.y,2)+Math.pow(m.z-best.z,2));
             return Math.abs(dist - m.r) > 10;
@@ -423,7 +429,6 @@ function calculateIntersections() {
     }
     
     intersections = foundTargets;
-    console.log("Nalezené cíle (v2.13):", intersections);
 }
 
 function getSphereIntersections(p1, p2, p3) {

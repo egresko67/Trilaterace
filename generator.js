@@ -1,89 +1,51 @@
 const fs = require('fs');
 
-/**
- * Generátor testovacích dat pro Trilaterace-Therapie (3D verze)
- */
+function generateData() {
+    // 10 cílů (EGGs) rozprostřených po Minecraft světě
+    const targets = [
+        { id: 0, x: -10,  y: 70,  z: -50 },
+        { id: 1, x: 150,  y: 65,  z: 120 },
+        { id: 2, x: 120,  y: -20, z: -130 },
+        { id: 3, x: -160, y: 110, z: 40 },
+        { id: 4, x: 80,   y: 10,  z: 10 },
+        { id: 5, x: -40,  y: 40,  z: 160 },
+        { id: 6, x: 180,  y: 90,  z: -80 },
+        { id: 7, x: -120, y: 30,  z: -170 },
+        { id: 8, x: 10,   y: 120, z: 90 },
+        { id: 9, x: 60,   y: -40, z: -30 }
+    ];
 
-const TARGET_COUNT = 10;
-const MEASUREMENT_COUNT = 30;
-const RANGE_MIN = -200;
-const RANGE_MAX = 200;
-const Y_MIN = -64;
-const Y_MAX = 320;
+    const measurements = {};
+    let mId = 0;
 
-function getRandomCoord(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
+    targets.forEach(t => {
+        // Pro každý cíl vygenerujeme 5 měření z různých pozic
+        for (let i = 0; i < 5; i++) {
+            const pX = t.x + (Math.random() * 200 - 100);
+            const pY = t.y + (Math.random() * 50 - 25);
+            const pZ = t.z + (Math.random() * 200 - 100);
+            
+            const dist = Math.sqrt(
+                Math.pow(pX - t.x, 2) + 
+                Math.pow(pY - t.y, 2) + 
+                Math.pow(pZ - t.z, 2)
+            );
 
-function calculateDistance3D(p1, p2) {
-    const dx = p1.x - p2.x;
-    const dy = p1.y - p2.y;
-    const dz = p1.z - p2.z;
-    return Math.sqrt(dx * dx + dy * dy + dz * dz);
-}
-
-// 1. Vygenerování 10 cílových bodů (vajec)
-const targets = [];
-for (let i = 0; i < TARGET_COUNT; i++) {
-    targets.push({
-        x: getRandomCoord(RANGE_MIN, RANGE_MAX),
-        y: getRandomCoord(Y_MIN, Y_MAX),
-        z: getRandomCoord(RANGE_MIN, RANGE_MAX)
-    });
-}
-
-const isJsonOnly = process.argv.includes('--json');
-const isFileExport = process.argv.includes('--file');
-
-if (!isJsonOnly && !isFileExport) {
-    console.log("--- CÍLOVÉ BODY (Skutečné polohy) ---");
-    targets.forEach((t, i) => console.log(`Cíl ${i+1}: [${t.x}, ${t.y}, ${t.z}]`));
-}
-
-// 2. Vygenerování měření
-const measurements = [];
-for (let i = 0; i < MEASUREMENT_COUNT; i++) {
-    const playerPos = {
-        x: getRandomCoord(RANGE_MIN, RANGE_MAX),
-        y: getRandomCoord(Y_MIN, Y_MAX),
-        z: getRandomCoord(RANGE_MIN, RANGE_MAX)
-    };
-
-    let minDistance = Infinity;
-    targets.forEach(target => {
-        const dist = calculateDistance3D(playerPos, target);
-        if (dist < minDistance) minDistance = dist;
+            // Striktní struktura pro Firebase: x, z, r musí být čísla
+            // Přidáme i y a timestamp, protože .validate kontroluje existenci x,z,r, ale nezakazuje ostatní
+            measurements[`m${mId++}`] = {
+                x: Math.round(pX * 10) / 10,
+                y: Math.round(pY * 10) / 10,
+                z: Math.round(pZ * 10) / 10,
+                r: Math.round(dist * 10) / 10,
+                timestamp: Date.now()
+            };
+        }
     });
 
-    measurements.push({
-        x: playerPos.x,
-        y: playerPos.y,
-        z: playerPos.z,
-        r: Math.round(minDistance * 10) / 10
-    });
+    fs.writeFileSync('measurements.json', JSON.stringify(measurements, null, 2));
+    fs.writeFileSync('targets.json', JSON.stringify(targets, null, 2));
+    console.log("Vygenerováno 10 cílů a 50 měření do measurements.json");
 }
 
-// JSON výstup
-const firebaseOutput = {};
-const now = Date.now();
-measurements.forEach((m, i) => {
-    // Použijeme klíče bez prefixu 'm', aby Firebase Console neprostestoval, 
-    // a uložíme jako čisté objekty.
-    firebaseOutput["test_" + (now + i)] = {
-        x: m.x,
-        y: m.y,
-        z: m.z,
-        r: m.r,
-        timestamp: now + i
-    };
-});
-
-if (isFileExport) {
-    fs.writeFileSync('test-data.json', JSON.stringify(firebaseOutput, null, 2), 'utf8');
-    console.log("Hotovo! Soubor test-data.json (UTF-8) byl vytvořen.");
-} else if (isJsonOnly) {
-    console.log(JSON.stringify(firebaseOutput, null, 2));
-} else {
-    console.log("\n--- JSON STRUKTURA PRO FIREBASE ---");
-    console.log(JSON.stringify(firebaseOutput, null, 2));
-}
+generateData();
