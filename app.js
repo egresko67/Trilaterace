@@ -40,13 +40,70 @@ const hoverInfo = document.getElementById('hover-info');
 const cursorCoords = document.getElementById('cursor-coords');
 const mapSvg = document.getElementById('map-svg');
 const viewport = document.getElementById('svg-viewport');
+const toggleCircles = document.getElementById('toggle-circles');
+const resetButton = document.getElementById('reset-view');
 
-let viewState = { x: 0, y: 0, zoom: 1, isDragging: false };
+let viewState = { x: 0, y: 0, zoom: 1, isDragging: false, startX: 0, startY: 0 };
+
+// --- ZOOM & PAN ---
+mapSvg.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rect = mapSvg.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) / rect.width * 400;
+    const mouseY = (e.clientY - rect.top) / rect.height * 400;
+    const delta = -e.deltaY;
+    const factor = Math.pow(1.1, delta / 100);
+    const newZoom = Math.min(Math.max(viewState.zoom * factor, 1.0), 15);
+    const actualFactor = newZoom / viewState.zoom;
+    viewState.x = mouseX - (mouseX - viewState.x) * actualFactor;
+    viewState.y = mouseY - (mouseY - viewState.y) * actualFactor;
+    viewState.zoom = newZoom;
+    updateViewTransformation();
+});
+
+mapSvg.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    viewState.isDragging = true;
+    const rect = mapSvg.getBoundingClientRect();
+    const scale = 400 / rect.width;
+    viewState.startX = e.clientX * scale - viewState.x;
+    viewState.startY = e.clientY * scale - viewState.y;
+});
+
+window.addEventListener('mousemove', (e) => {
+    if (viewState.isDragging) {
+        const rect = mapSvg.getBoundingClientRect();
+        const scale = 400 / rect.width;
+        viewState.x = e.clientX * scale - viewState.startX;
+        viewState.y = e.clientY * scale - viewState.startY;
+        updateViewTransformation();
+    }
+    const rect = mapSvg.getBoundingClientRect();
+    if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        const x = Math.round(((e.clientX - rect.left) / rect.width * 400) - OFFSET);
+        const z = Math.round(((e.clientY - rect.top) / rect.height * 400) - OFFSET);
+        cursorCoords.textContent = `X: ${x}, Z: ${z}`;
+        cursorCoords.style.opacity = '1';
+    }
+});
+
+window.addEventListener('mouseup', () => { viewState.isDragging = false; });
+
+function updateViewTransformation() {
+    const minPan = 400 * (1 - viewState.zoom);
+    viewState.x = Math.min(Math.max(viewState.x, minPan), 0);
+    viewState.y = Math.min(Math.max(viewState.y, minPan), 0);
+    viewport.setAttribute('transform', `translate(${viewState.x}, ${viewState.y}) scale(${viewState.zoom})`);
+}
+
+resetButton.addEventListener('click', () => {
+    viewState = { x: 0, y: 0, zoom: 1, isDragging: false, startX: 0, startY: 0 };
+    updateViewTransformation();
+});
 
 // --- POMOCNÉ FUNKCE ---
 function toCoord(val) { return parseFloat(val) + OFFSET; }
 function getCurrentDateStr() { return new Date().toISOString().split('T')[0]; }
-
 function getConfidenceColor(conf) {
     if (conf >= 100) return '#22c55e';
     if (conf >= 10) return '#fbbf24';
@@ -58,15 +115,11 @@ function getConfidenceColor(conf) {
 function loadData() {
     const dateStr = getCurrentDateStr();
     dateSpan.textContent = dateStr;
-
-    // Načítání měření
     onValue(ref(db, `measurements/${dateStr}`), (snap) => {
         const data = snap.val();
         measurements = data ? Object.entries(data).map(([id, v]) => ({ id, ...v })) : [];
         processAll();
     });
-
-    // Načítání potvrzených vajec
     onValue(ref(db, `confirmed_eggs/${dateStr}`), (snap) => {
         const data = snap.val();
         confirmedEggs = data ? Object.entries(data).map(([id, v]) => ({ id, ...v })) : [];
@@ -83,22 +136,13 @@ function processAll() {
 function calculateIntersections() {
     let currentMeasurements = [...measurements];
     let foundTargets = [];
-    
-    // 1. ODRUŠENÍ: Odstraníme měření, která už potvrzují existující vejce
     confirmedEggs.forEach(egg => {
         currentMeasurements = currentMeasurements.filter(m => {
             const d = Math.sqrt(Math.pow(egg.x-m.x,2)+Math.pow(egg.y-m.y,2)+Math.pow(egg.z-m.z,2));
             return Math.abs(d - m.r) > 5;
         });
     });
-
     const MAX_TARGETS = 10 - confirmedEggs.length;
-    if (MAX_TARGETS <= 0) {
-        intersections = [];
-        return;
-    }
-
-    // 2. ALGORITMUS (Consistency Check)
     for (let t = 0; t < MAX_TARGETS; t++) {
         if (currentMeasurements.length < 3) break;
         let candidates = [];
@@ -125,9 +169,7 @@ function calculateIntersections() {
         candidates.sort((a, b) => b.support - a.support);
         const best = candidates[0];
         if (best.support < 3) break;
-
         foundTargets.push({ x: best.x, y: best.y, z: best.z, confidence: best.support });
-
         currentMeasurements = currentMeasurements.filter(m => {
             const d = Math.sqrt(Math.pow(best.x-m.x,2)+Math.pow(best.y-m.y,2)+Math.pow(best.z-m.z,2));
             return Math.abs(d - m.r) > 5;
@@ -136,19 +178,14 @@ function calculateIntersections() {
     intersections = foundTargets;
 }
 
-// --- UI ---
 function updateUI() {
     countSpan.textContent = measurements.length;
-    
-    // Historie
     tableBody.innerHTML = '';
     measurements.sort((a,b)=>b.timestamp-a.timestamp).forEach(m => {
         const tr = document.createElement('tr');
         tr.innerHTML = `<td><span class="mono">${Math.round(m.x)} / ${Math.round(m.y)} / ${Math.round(m.z)}</span></td><td>${m.r}</td><td><button class="btn-del-small" onclick="deleteMeasurement('${m.id}')">✕</button></td>`;
         tableBody.appendChild(tr);
     });
-
-    // POI (Odhady)
     targetsTableBody.innerHTML = '';
     intersections.forEach(p => {
         const tr = document.createElement('tr');
@@ -160,8 +197,6 @@ function updateUI() {
         `;
         targetsTableBody.appendChild(tr);
     });
-
-    // Potvrzená vejce
     confirmedTableBody.innerHTML = '';
     confirmedEggs.forEach(e => {
         const tr = document.createElement('tr');
@@ -170,36 +205,34 @@ function updateUI() {
     });
 }
 
-window.deleteMeasurement = (id) => remove(ref(db, `measurements/${getCurrentDateStr()}/${id}`));
-window.deleteEgg = (id) => remove(ref(db, `confirmed_eggs/${getCurrentDateStr()}/${id}`));
-
-window.confirmEgg = async (x, y, z) => {
-    const dateStr = getCurrentDateStr();
-    await push(ref(db, `confirmed_eggs/${dateStr}`), { 
-        x: Math.round(x), 
-        y: Math.round(y), 
-        z: Math.round(z), 
-        timestamp: Date.now() 
-    });
-};
-
-window.addManualEgg = async () => {
-    const x = document.getElementById('conf-x').value;
-    const y = document.getElementById('conf-y').value;
-    const z = document.getElementById('conf-z').value;
-    if (x && y && z) {
-        await window.confirmEgg(x, y, z);
-        document.getElementById('conf-x').value = '';
-        document.getElementById('conf-y').value = '';
-        document.getElementById('conf-z').value = '';
-    }
-};
-
-// --- RENDER ---
+// --- RENDER OVÁNÍ (SVG) ---
 function renderSVG() {
+    // 1. Grid
+    layers.grid.innerHTML = '';
+    const step = 50;
+    for (let i = 0; i <= 400; i += step) {
+        const vLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        vLine.setAttribute("x1", i); vLine.setAttribute("y1", 0); vLine.setAttribute("x2", i); vLine.setAttribute("y2", 400);
+        vLine.setAttribute("class", i === 200 ? "svg-axis-line" : "svg-grid-line");
+        layers.grid.appendChild(vLine);
+        const hLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        hLine.setAttribute("x1", 0); hLine.setAttribute("y1", i); hLine.setAttribute("x2", 400); hLine.setAttribute("y2", i);
+        hLine.setAttribute("class", i === 200 ? "svg-axis-line" : "svg-grid-line");
+        layers.grid.appendChild(hLine);
+    }
+
+    // 2. Kružnice
+    layers.circles.innerHTML = '';
+    measurements.forEach(m => {
+        const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        c.setAttribute("cx", toCoord(m.x)); c.setAttribute("cy", toCoord(m.z));
+        c.setAttribute("r", m.r); c.setAttribute("class", "svg-measurement-circle");
+        c.style.fill = "none"; c.style.stroke = "var(--primary)"; c.style.opacity = "0.15";
+        layers.circles.appendChild(c);
+    });
+
+    // 3. POI a Potvrzená vejce
     layers.intersections.innerHTML = '';
-    
-    // Vykreslení odhadů
     intersections.forEach(p => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         c.setAttribute("cx", toCoord(p.x)); c.setAttribute("cy", toCoord(p.z));
@@ -210,45 +243,39 @@ function renderSVG() {
         layers.intersections.appendChild(c);
     });
 
-    // Vykreslení POTVRZENÝCH vajec (Zlatá)
     confirmedEggs.forEach(e => {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         c.setAttribute("cx", toCoord(e.x)); c.setAttribute("cy", toCoord(e.z));
         c.setAttribute("r", 10);
         c.style.fill = "#fbbf24"; c.style.stroke = "#fff"; c.style.strokeWidth = "2";
-        
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
         text.setAttribute("x", toCoord(e.x)-5); text.setAttribute("y", toCoord(e.z)+4);
         text.setAttribute("font-size", "10"); text.textContent = "🥚";
-        
         g.appendChild(c); g.appendChild(text);
         layers.intersections.appendChild(g);
     });
-    
-    // (Zbytek renderu gridu a kružnic zůstává podobný...)
-    renderBaseLayers();
 }
 
-function renderBaseLayers() {
-    layers.grid.innerHTML = ''; // Zjednodušený grid pro přehlednost v ukázce
-    layers.circles.innerHTML = '';
-    measurements.forEach(m => {
-        const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        c.setAttribute("cx", toCoord(m.x)); c.setAttribute("cy", toCoord(m.z));
-        c.setAttribute("r", m.r); c.setAttribute("class", "svg-measurement-circle");
-        c.style.opacity = "0.1";
-        layers.circles.appendChild(c);
-    });
-}
+// --- GLOBÁLNÍ FUNKCE ---
+window.deleteMeasurement = (id) => remove(ref(db, `measurements/${getCurrentDateStr()}/${id}`));
+window.deleteEgg = (id) => remove(ref(db, `confirmed_eggs/${getCurrentDateStr()}/${id}`));
+window.confirmEgg = async (x, y, z) => {
+    const dateStr = getCurrentDateStr();
+    await push(ref(db, `confirmed_eggs/${dateStr}`), { x: Math.round(x), y: Math.round(y), z: Math.round(z), timestamp: Date.now() });
+};
+window.addManualEgg = async () => {
+    const x = document.getElementById('conf-x').value;
+    const y = document.getElementById('conf-y').value;
+    const z = document.getElementById('conf-z').value;
+    if (x && y && z) { await window.confirmEgg(x, y, z); document.getElementById('conf-x').value = ''; document.getElementById('conf-y').value = ''; document.getElementById('conf-z').value = ''; }
+};
 
-// --- TRILATERACE (Vector Math) ---
 function getSphereIntersections(p1, p2, p3) {
     const P1 = { x: p1.x, y: p1.y || 0, z: p1.z };
     const P2 = { x: p2.x, y: p2.y || 0, z: p2.z };
     const P3 = { x: p3.x, y: p3.y || 0, z: p3.z };
     const r1 = p1.r, r2 = p2.r, r3 = p3.r;
-
     const sub = (v1, v2) => ({ x: v1.x - v2.x, y: v1.y - v2.y, z: v1.z - v2.z });
     const dot = (v1, v2) => v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
     const mag = (v) => Math.sqrt(dot(v, v));
@@ -256,45 +283,32 @@ function getSphereIntersections(p1, p2, p3) {
     const mul = (v, s) => ({ x: v.x * s, y: v.y * s, z: v.z * s });
     const add = (v1, v2) => ({ x: v1.x + v2.x, y: v1.y + v2.y, z: v1.z + v2.z });
     const cross = (v1, v2) => ({ x: v1.y * v2.z - v1.z * v2.y, y: v1.z * v2.x - v1.x * v2.z, z: v1.x * v2.y - v1.y * v2.x });
-
-    const d_vec = sub(P2, P1); const d = mag(d_vec);
-    if (d < 0.1) return null;
-    const ex = div(d_vec, d);
-    const p3p1 = sub(P3, P1); const i = dot(ex, p3p1);
-    const ey_vec = sub(p3p1, mul(ex, i)); const j = mag(ey_vec);
-    if (j < 0.5) return null;
+    const d_vec = sub(P2, P1); const d = mag(d_vec); if (d < 0.1) return null;
+    const ex = div(d_vec, d); const p3p1 = sub(P3, P1); const i = dot(ex, p3p1);
+    const ey_vec = sub(p3p1, mul(ex, i)); const j = mag(ey_vec); if (j < 0.5) return null;
     const ey = div(ey_vec, j); const ez = cross(ex, ey);
     const x = (r1 * r1 - r2 * r2 + d * d) / (2 * d);
     const y = (r1 * r1 - r3 * r3 + i * i + j * j) / (2 * j) - (i / j) * x;
-    const zSq = r1 * r1 - x * x - y * y;
-    if (zSq < -100) return null;
+    const zSq = r1 * r1 - x * x - y * y; if (zSq < -100) return null;
     const z = Math.sqrt(Math.max(0, zSq));
     const base = add(P1, add(mul(ex, x), mul(ey, y)));
     return [add(base, mul(ez, z)), sub(base, mul(ez, z))];
 }
 
-// --- TOOLTIP & ZOOM ---
-function showTooltip(e, p) {
-    hoverInfo.style.display = 'block';
-    hoverInfo.innerHTML = `<strong>Odhad</strong><br>X: ${Math.round(p.x)}<br>Y: ${Math.round(p.y)}<br>Z: ${Math.round(p.z)}`;
-    moveTooltip(e);
-}
-function moveTooltip(e) {
-    hoverInfo.style.position = 'fixed';
-    hoverInfo.style.left = `${e.clientX + 15}px`;
-    hoverInfo.style.top = `${e.clientY + 15}px`;
-}
+function showTooltip(e, p) { hoverInfo.style.display = 'block'; hoverInfo.innerHTML = `<strong>Odhad</strong><br>X: ${Math.round(p.x)}<br>Y: ${Math.round(p.y)}<br>Z: ${Math.round(p.z)}`; moveTooltip(e); }
+function moveTooltip(e) { hoverInfo.style.position = 'fixed'; hoverInfo.style.left = `${e.clientX + 15}px`; hoverInfo.style.top = `${e.clientY + 15}px`; }
 function hideTooltip() { hoverInfo.style.display = 'none'; }
 window.focusOnPoint = (x, z) => {
-    viewport.setAttribute('transform', `translate(${200 - (x+200)*2}, ${200 - (z+200)*2}) scale(2)`);
+    const tx = 200 - (x+OFFSET)*viewState.zoom;
+    const tz = 200 - (z+OFFSET)*viewState.zoom;
+    viewState.x = tx; viewState.y = tz; viewState.zoom = 2;
+    updateViewTransformation();
 };
 
 form.onsubmit = async (e) => {
     e.preventDefault();
     const dateStr = getCurrentDateStr();
-    await push(ref(db, `measurements/${dateStr}`), {
-        x: parseFloat(xInput.value), y: parseFloat(yInput.value), z: parseFloat(zInput.value), r: parseFloat(rInput.value), timestamp: Date.now()
-    });
+    await push(ref(db, `measurements/${dateStr}`), { x: parseFloat(xInput.value), y: parseFloat(yInput.value), z: parseFloat(zInput.value), r: parseFloat(rInput.value), timestamp: Date.now() });
     form.reset();
 };
 
