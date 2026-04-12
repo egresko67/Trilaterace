@@ -159,33 +159,25 @@ function renderSVG() {
         circle.setAttribute("r", m.r);
         circle.setAttribute("fill", "url(#circle-grad)");
         circle.setAttribute("stroke", "rgba(56, 189, 248, 0.4)");
-        circle.setAttribute("stroke-width", "1.5");
+        circle.setAttribute("stroke-width", "1");
         layers.circles.appendChild(circle);
     });
 
     layers.intersections.innerHTML = '';
-    intersections.forEach(p => {
+    intersections.forEach((p, idx) => {
         const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         point.setAttribute("cx", toCoord(p.x));
         point.setAttribute("cy", toCoord(p.z));
         point.setAttribute("r", "6");
         point.setAttribute("class", "svg-poi-point");
         
-        // Native SVG Animation for radius (r)
+        // Subtle native animation
         const anim = document.createElementNS("http://www.w3.org/2000/svg", "animate");
         anim.setAttribute("attributeName", "r");
-        anim.setAttribute("values", "5.5;7.5;5.5");
-        anim.setAttribute("dur", "2.5s");
+        anim.setAttribute("values", "5.5;6.5;5.5");
+        anim.setAttribute("dur", "3s");
         anim.setAttribute("repeatCount", "indefinite");
         point.appendChild(anim);
-
-        // Native SVG Animation for opacity
-        const animOp = document.createElementNS("http://www.w3.org/2000/svg", "animate");
-        animOp.setAttribute("attributeName", "opacity");
-        animOp.setAttribute("values", "0.7;1;0.7");
-        animOp.setAttribute("dur", "2.5s");
-        animOp.setAttribute("repeatCount", "indefinite");
-        point.appendChild(animOp);
 
         point.addEventListener('mouseenter', (e) => showTooltip(e, p));
         point.addEventListener('mousemove', (e) => moveTooltip(e));
