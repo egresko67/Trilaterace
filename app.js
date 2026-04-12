@@ -24,6 +24,7 @@ const OFFSET = 200;
 // DOM Elementy
 const form = document.getElementById('measurement-form');
 const xInput = document.getElementById('x-coord');
+const yInput = document.getElementById('y-coord');
 const zInput = document.getElementById('z-coord');
 const rInput = document.getElementById('radius');
 const tableBody = document.querySelector('#measurements-table tbody');
@@ -185,7 +186,7 @@ function updateUI() {
         const tr = document.createElement('tr');
         tr.setAttribute('data-id', m.id);
         tr.innerHTML = `
-            <td><span class="mono">${m.x} / ${m.z}</span></td>
+            <td><span class="mono">${m.x} / ${m.y || 0} / ${m.z}</span></td>
             <td><span class="mono">${m.r}</span></td>
             <td><button class="btn-del-small" data-id="${m.id}" title="Smazat">✕</button></td>
         `;
@@ -236,6 +237,7 @@ form.onsubmit = async (e) => {
     const timestamp = Date.now();
     const newMeasurement = {
         x: parseFloat(xInput.value),
+        y: parseFloat(yInput.value),
         z: parseFloat(zInput.value),
         r: parseFloat(rInput.value),
         timestamp: timestamp
@@ -342,27 +344,35 @@ function renderSVG() {
 
 function calculateIntersections() {
     let allIntersections = [];
-    if (measurements.length < 2) {
+    if (measurements.length < 3) {
         intersections = [];
         return;
     }
     for (let i = 0; i < measurements.length; i++) {
         for (let j = i + 1; j < measurements.length; j++) {
-            const pts = getCircleIntersections(measurements[i], measurements[j]);
-            if (pts) allIntersections.push(...pts);
+            for (let k = j + 1; k < measurements.length; k++) {
+                const pts = getSphereIntersections(measurements[i], measurements[j], measurements[k]);
+                if (pts) allIntersections.push(...pts);
+            }
         }
     }
     const clusters = [];
-    const DISTANCE_THRESHOLD = 15; 
+    const DISTANCE_THRESHOLD = 10; 
     allIntersections.forEach(p => {
         let addedToCluster = false;
         for (let cluster of clusters) {
             const center = cluster.center;
-            const dist = Math.sqrt(Math.pow(p.x - center.x, 2) + Math.pow(p.z - center.z, 2));
+            // Shlukování provádíme v 3D
+            const dist = Math.sqrt(
+                Math.pow(p.x - center.x, 2) + 
+                Math.pow(p.y - center.y, 2) + 
+                Math.pow(p.z - center.z, 2)
+            );
             if (dist < DISTANCE_THRESHOLD) {
                 cluster.points.push(p);
                 cluster.center = {
                     x: cluster.points.reduce((sum, pt) => sum + pt.x, 0) / cluster.points.length,
+                    y: cluster.points.reduce((sum, pt) => sum + pt.y, 0) / cluster.points.length,
                     z: cluster.points.reduce((sum, pt) => sum + pt.z, 0) / cluster.points.length
                 };
                 addedToCluster = true;
@@ -370,37 +380,77 @@ function calculateIntersections() {
             }
         }
         if (!addedToCluster) {
-            clusters.push({ center: { x: p.x, z: p.z }, points: [p] });
+            clusters.push({ center: { x: p.x, y: p.y, z: p.z }, points: [p] });
         }
     });
     intersections = clusters.map(c => ({
         x: c.center.x,
+        y: c.center.y,
         z: c.center.z,
         confidence: c.points.length,
         isMajor: c.points.length > 1
     })).sort((a, b) => b.confidence - a.confidence);
 }
 
-function getCircleIntersections(c1, c2) {
-    const dx = c2.x - c1.x;
-    const dz = c2.z - c1.z;
-    const d = Math.sqrt(dx * dx + dz * dz);
-    if (d > c1.r + c2.r || d < Math.abs(c1.r - c2.r) || d === 0) return null;
-    const a = (c1.r * c1.r - c2.r * c2.r + d * d) / (2 * d);
-    const h = Math.sqrt(Math.max(0, c1.r * c1.r - a * a));
-    const x2 = c1.x + a * dx / d;
-    const z2 = c1.z + a * dz / d;
-    const rx = -dz * (h / d);
-    const rz = dx * (h / d);
-    return [
-        { x: x2 + rx, z: z2 + rz },
-        { x: x2 - rx, z: z2 - rz }
-    ];
+function getSphereIntersections(p1, p2, p3) {
+    // Vektory mezi středy sfér
+    const P1 = { x: p1.x, y: p1.y || 0, z: p1.z };
+    const P2 = { x: p2.x, y: p2.y || 0, z: p2.z };
+    const P3 = { x: p3.x, y: p3.y || 0, z: p3.z };
+    const r1 = p1.r;
+    const r2 = p2.r;
+    const r3 = p3.r;
+
+    // ex = (P2 - P1) / |P2 - P1|
+    const dvec = { x: P2.x - P1.x, y: P2.y - P1.y, z: P2.z - P1.z };
+    const d = Math.sqrt(dvec.x * dvec.x + dvec.y * dvec.y + dvec.z * dvec.z);
+    if (d === 0) return null;
+    const ex = { x: dvec.x / d, y: dvec.y / d, z: dvec.z / d };
+
+    // i = ex . (P3 - P1)
+    const p3p1 = { x: P3.x - P1.x, y: P3.y - P1.y, z: P3.z - P1.z };
+    const i = ex.x * p3p1.x + ex.y * p3p1.y + ex.z * p3p1.z;
+
+    // ey = (P3 - P1 - i*ex) / |P3 - P1 - i*ex|
+    const eyvec = { x: p3p1.x - i * ex.x, y: p3p1.y - i * ex.y, z: p3p1.z - i * ex.z };
+    const j = Math.sqrt(eyvec.x * eyvec.x + eyvec.y * eyvec.y + eyvec.z * eyvec.z);
+    if (j === 0) return null;
+    const ey = { x: eyvec.x / j, y: eyvec.y / j, z: eyvec.z / j };
+
+    // ez = ex x ey
+    const ez = {
+        x: ex.y * ey.z - ex.z * ey.y,
+        y: ex.z * ey.x - ex.x * ey.z,
+        z: ex.x * ey.y - ex.y * ey.x
+    };
+
+    // x = (r1^2 - r2^2 + d^2) / 2d
+    const x = (r1 * r1 - r2 * r2 + d * d) / (2 * d);
+    // y = (r1^2 - r3^2 + i^2 + j^2) / 2j - (i/j) * x
+    const y = (r1 * r1 - r3 * r3 + i * i + j * j) / (2 * j) - (i / j) * x;
+
+    const zSquared = r1 * r1 - x * x - y * y;
+    if (zSquared < 0) return null; // Sféry se neprotínají ve všech třech bodech
+    const z = Math.sqrt(zSquared);
+
+    // P = P1 + x*ex + y*ey +- z*ez
+    const result1 = {
+        x: P1.x + x * ex.x + y * ey.x + z * ez.x,
+        y: P1.y + x * ex.y + y * ey.y + z * ez.y,
+        z: P1.z + x * ex.z + y * ey.z + z * ez.z
+    };
+    const result2 = {
+        x: P1.x + x * ex.x + y * ey.x - z * ez.x,
+        y: P1.y + x * ex.y + y * ey.y - z * ez.y,
+        z: P1.z + x * ex.z + y * ey.z - z * ez.z
+    };
+
+    return [result1, result2];
 }
 
 function showTooltip(e, p) {
     hoverInfo.style.display = 'block';
-    hoverInfo.innerHTML = `<strong>Odhad vejce</strong><br>X: ${p.x.toFixed(1)}<br>Z: ${p.z.toFixed(1)}`;
+    hoverInfo.innerHTML = `<strong>Odhad vejce</strong><br>X: ${p.x.toFixed(1)}<br>Y: ${p.y.toFixed(1)}<br>Z: ${p.z.toFixed(1)}`;
     moveTooltip(e);
 }
 
