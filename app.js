@@ -108,6 +108,7 @@ toggleCircles.addEventListener('change', () => {
 // --- POMOCNÉ FUNKCE ---
 function toCoord(val) { return parseFloat(val) + OFFSET; }
 function getCurrentDateStr() { return new Date().toISOString().split('T')[0]; }
+
 function getConfidenceColor(conf) {
     if (conf >= 100) return '#22c55e';
     if (conf >= 10) return '#fbbf24';
@@ -161,16 +162,19 @@ function processAll() {
 function calculateIntersections() {
     let currentMeasurements = [...measurements];
     let foundTargets = [];
+    
     confirmedEggs.forEach(egg => {
         currentMeasurements = currentMeasurements.filter(m => {
             const d = Math.sqrt(Math.pow(egg.x-m.x,2)+Math.pow(egg.y-m.y,2)+Math.pow(egg.z-m.z,2));
             return Math.abs(d - m.r) > 5;
         });
     });
+
     const MAX_TARGETS = 10 - confirmedEggs.length;
     for (let t = 0; t < MAX_TARGETS; t++) {
         if (currentMeasurements.length < 3) break;
         let candidates = [];
+        
         for (let i = 0; i < currentMeasurements.length; i++) {
             for (let j = i + 1; j < currentMeasurements.length; j++) {
                 for (let k = j + 1; k < currentMeasurements.length; k++) {
@@ -178,23 +182,44 @@ function calculateIntersections() {
                     if (pts) {
                         pts.forEach(p => {
                             if (p.y >= -64 && p.y <= 320) {
-                                let support = 0;
+                                let matchingPoints = [];
                                 measurements.forEach(m => {
                                     const d = Math.sqrt(Math.pow(p.x-m.x,2)+Math.pow(p.y-m.y,2)+Math.pow(p.z-m.z,2));
-                                    if (Math.abs(d - m.r) < 5) support++;
+                                    if (Math.abs(d - m.r) < 5) matchingPoints.push(m);
                                 });
-                                candidates.push({...p, support});
+                                
+                                if (matchingPoints.length >= 3) {
+                                    // Kvalita geometrie: průměrná vzdálenost mezi měřeními (čím víc rozptýlené, tím lepší)
+                                    let totalDist = 0;
+                                    let count = 0;
+                                    for(let a=0; a<matchingPoints.length; a++) {
+                                        for(let b=a+1; b<matchingPoints.length; b++) {
+                                            totalDist += Math.sqrt(Math.pow(matchingPoints[a].x-matchingPoints[b].x,2) + Math.pow(matchingPoints[a].z-matchingPoints[b].z,2));
+                                            count++;
+                                        }
+                                    }
+                                    const geometryQuality = count > 0 ? (totalDist / count) : 0;
+                                    candidates.push({...p, support: matchingPoints.length, quality: geometryQuality});
+                                }
                             }
                         });
                     }
                 }
             }
         }
+        
         if (candidates.length === 0) break;
-        candidates.sort((a, b) => b.support - a.support);
+        
+        // Priorita: Support, pak kvalita geometrie
+        candidates.sort((a, b) => (b.support * 1000 + b.quality) - (a.support * 1000 + a.quality));
         const best = candidates[0];
-        if (best.support < 3) break;
-        foundTargets.push({ x: best.x, y: best.y, z: best.z, confidence: best.support });
+        
+        foundTargets.push({ 
+            x: best.x, y: best.y, z: best.z, 
+            confidence: best.support,
+            quality: Math.min(100, Math.round(best.quality / 2)) // Normalizace na 0-100
+        });
+        
         currentMeasurements = currentMeasurements.filter(m => {
             const d = Math.sqrt(Math.pow(best.x-m.x,2)+Math.pow(best.y-m.y,2)+Math.pow(best.z-m.z,2));
             return Math.abs(d - m.r) > 5;
@@ -213,17 +238,21 @@ function updateUI() {
         tr.innerHTML = `<td><span class="mono">${Math.round(m.x)} / ${Math.round(m.y)} / ${Math.round(m.z)}</span></td><td>${m.r}</td><td><button class="btn-del-small" onclick="deleteMeasurement('${m.id}')">✕</button></td>`;
         tableBody.appendChild(tr);
     });
+    
     targetsTableBody.innerHTML = '';
     intersections.forEach(p => {
         const tr = document.createElement('tr');
         const color = getConfidenceColor(p.confidence);
         tr.innerHTML = `
-            <td><span class="mono clickable" onclick="focusOnPoint(${p.x},${p.z})">${Math.round(p.x)} / ${Math.round(p.y)} / ${Math.round(p.z)}</span></td>
+            <td><span class="mono clickable" onclick="focusOnPoint(${p.x},${p.z})">${Math.round(p.x)} / ${Math.round(p.y)} / ${Math.round(p.z)}</span>
+                <div style="font-size: 0.6rem; color: #94a3b8">Kvalita dat: ${p.quality}%</div>
+            </td>
             <td><span class="badge" style="color:${color}">${p.confidence}</span></td>
-            <td><button class="btn-primary" style="padding:4px 8px; font-size:0.7rem" onclick="confirmEgg(${p.x},${p.y},${p.z})">Potvrdit 🥚</button></td>
+            <td><button class="btn-primary" style="padding:4px 8px; font-size:0.7rem" onclick="confirmEgg(${p.x},${p.y},${p.z})">Ok</button></td>
         `;
         targetsTableBody.appendChild(tr);
     });
+    
     confirmedTableBody.innerHTML = '';
     confirmedEggs.forEach(e => {
         const tr = document.createElement('tr');
@@ -232,7 +261,6 @@ function updateUI() {
     });
 }
 
-// --- RENDER OVÁNÍ (SVG) ---
 function renderSVG() {
     layers.grid.innerHTML = '';
     const step = 50;
@@ -293,6 +321,11 @@ function renderSVG() {
 
 // --- GLOBÁLNÍ FUNKCE ---
 window.deleteMeasurement = (id) => remove(ref(db, `measurements/${getCurrentDateStr()}/${id}`));
+window.deleteAllMeasurements = async () => {
+    if(confirm("Opravdu smazat všechna měření pro dnešek?")) {
+        await remove(ref(db, `measurements/${getCurrentDateStr()}`));
+    }
+};
 window.deleteEgg = (id) => remove(ref(db, `confirmed_eggs/${getCurrentDateStr()}/${id}`));
 window.confirmEgg = async (x, y, z) => {
     const dateStr = getCurrentDateStr();
@@ -329,7 +362,7 @@ function getSphereIntersections(p1, p2, p3) {
     return [add(base, mul(ez, z)), sub(base, mul(ez, z))];
 }
 
-function showTooltip(e, p) { hoverInfo.style.display = 'block'; hoverInfo.innerHTML = `<strong>Odhad</strong><br>X: ${Math.round(p.x)}<br>Y: ${Math.round(p.y)}<br>Z: ${Math.round(p.z)}`; moveTooltip(e); }
+function showTooltip(e, p) { hoverInfo.style.display = 'block'; hoverInfo.innerHTML = `<strong>Odhad</strong><br>X: ${Math.round(p.x)}<br>Y: ${Math.round(p.y)}<br>Z: ${Math.round(p.z)}<br><small>Kvalita geometrie: ${p.quality}%</small>`; moveTooltip(e); }
 function moveTooltip(e) { hoverInfo.style.position = 'fixed'; hoverInfo.style.left = `${e.clientX + 15}px`; hoverInfo.style.top = `${e.clientY + 15}px`; }
 function hideTooltip() { hoverInfo.style.display = 'none'; }
 window.focusOnPoint = (x, z) => {

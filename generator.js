@@ -28,10 +28,10 @@ function generateData() {
             );
 
             measurements[`m${mId++}`] = {
-                x: Math.round(pX * 10) / 10,
-                y: Math.round(pY * 10) / 10,
-                z: Math.round(pZ * 10) / 10,
-                r: Math.round(dist * 10) / 10,
+                x: Math.round(pX),
+                y: Math.round(pY),
+                z: Math.round(pZ),
+                r: Math.round(dist),
                 timestamp: Date.now()
             };
         }
