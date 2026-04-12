@@ -101,18 +101,23 @@ async function deleteMeasurement(id) {
 form.onsubmit = async (e) => {
     e.preventDefault();
     const dateStr = getCurrentDateStr();
+    const timestamp = Date.now();
     const newMeasurement = {
         x: parseFloat(xInput.value),
         z: parseFloat(zInput.value),
         r: parseFloat(rInput.value),
-        timestamp: Date.now()
+        timestamp: timestamp
     };
 
-    const dataRef = ref(db, `measurements/${dateStr}`);
-    const newRef = push(dataRef);
-    await set(newRef, newMeasurement);
-
-    form.reset();
+    try {
+        const dataRef = ref(db, `measurements/${dateStr}`);
+        const newRef = push(dataRef);
+        await set(newRef, newMeasurement);
+        form.reset();
+    } catch (error) {
+        console.error("Chyba při odesílání dat:", error);
+        alert("Chyba: " + error.message + "\nZkontrolujte konzoli (F12) nebo Firebase Rules.");
+    }
 };
 
 // --- RENDER OVÁNÍ ---
