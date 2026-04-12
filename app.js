@@ -5,6 +5,7 @@ import { getDatabase, ref, onValue, push, set, remove } from "firebase/database"
 const firebaseConfig = {
   apiKey: "AIzaSyCoMnZyBg6IV6H_NPuX40c2dbrChCkYPCs",
   authDomain: "trilaterace.firebaseapp.com",
+  databaseURL: "VLOZ_SEM_URL_Z_FIREBASE_KONZOLE", 
   projectId: "trilaterace",
   storageBucket: "trilaterace.firebasestorage.app",
   messagingSenderId: "542609606032",
