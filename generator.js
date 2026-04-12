@@ -15,8 +15,8 @@ function generateData() {
     let mId = 0;
 
     targets.forEach(t => {
-        // Každý cíl bude mít 3 měření (celkem 30)
-        for (let i = 0; i < 3; i++) {
+        // Každý cíl bude mít 4 měření (celkem 40)
+        for (let i = 0; i < 4; i++) {
             const pX = t.x + (Math.random() * 100 - 50);
             const pY = t.y + (Math.random() * 100 - 50);
             const pZ = t.z + (Math.random() * 100 - 50);

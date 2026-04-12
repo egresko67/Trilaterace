@@ -101,6 +101,10 @@ resetButton.addEventListener('click', () => {
     updateViewTransformation();
 });
 
+toggleCircles.addEventListener('change', () => {
+    layers.circles.style.display = toggleCircles.checked ? 'block' : 'none';
+});
+
 // --- POMOCNÉ FUNKCE ---
 function toCoord(val) { return parseFloat(val) + OFFSET; }
 function getCurrentDateStr() { return new Date().toISOString().split('T')[0]; }
@@ -109,6 +113,27 @@ function getConfidenceColor(conf) {
     if (conf >= 10) return '#fbbf24';
     if (conf >= 4) return '#f97316';
     return '#94a3b8';
+}
+
+function highlightMeasurement(id) {
+    document.querySelectorAll('.svg-measurement-circle').forEach(c => {
+        if (c.getAttribute('data-id') === id) {
+            c.classList.add('highlight');
+            c.style.opacity = "1";
+            c.style.strokeWidth = "2";
+        } else {
+            c.classList.add('dimmed');
+            c.style.opacity = "0.05";
+        }
+    });
+}
+
+function resetHighlight() {
+    document.querySelectorAll('.svg-measurement-circle').forEach(c => {
+        c.classList.remove('highlight', 'dimmed');
+        c.style.opacity = "0.15";
+        c.style.strokeWidth = "1";
+    });
 }
 
 // --- DATA ---
@@ -183,6 +208,8 @@ function updateUI() {
     tableBody.innerHTML = '';
     measurements.sort((a,b)=>b.timestamp-a.timestamp).forEach(m => {
         const tr = document.createElement('tr');
+        tr.onmouseenter = () => highlightMeasurement(m.id);
+        tr.onmouseleave = () => resetHighlight();
         tr.innerHTML = `<td><span class="mono">${Math.round(m.x)} / ${Math.round(m.y)} / ${Math.round(m.z)}</span></td><td>${m.r}</td><td><button class="btn-del-small" onclick="deleteMeasurement('${m.id}')">✕</button></td>`;
         tableBody.appendChild(tr);
     });
@@ -207,7 +234,6 @@ function updateUI() {
 
 // --- RENDER OVÁNÍ (SVG) ---
 function renderSVG() {
-    // 1. Grid
     layers.grid.innerHTML = '';
     const step = 50;
     for (let i = 0; i <= 400; i += step) {
@@ -221,17 +247,16 @@ function renderSVG() {
         layers.grid.appendChild(hLine);
     }
 
-    // 2. Kružnice
     layers.circles.innerHTML = '';
     measurements.forEach(m => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         c.setAttribute("cx", toCoord(m.x)); c.setAttribute("cy", toCoord(m.z));
         c.setAttribute("r", m.r); c.setAttribute("class", "svg-measurement-circle");
+        c.setAttribute("data-id", m.id);
         c.style.fill = "none"; c.style.stroke = "var(--primary)"; c.style.opacity = "0.15";
         layers.circles.appendChild(c);
     });
 
-    // 3. POI a Potvrzená vejce
     layers.intersections.innerHTML = '';
     intersections.forEach(p => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -299,9 +324,9 @@ function showTooltip(e, p) { hoverInfo.style.display = 'block'; hoverInfo.innerH
 function moveTooltip(e) { hoverInfo.style.position = 'fixed'; hoverInfo.style.left = `${e.clientX + 15}px`; hoverInfo.style.top = `${e.clientY + 15}px`; }
 function hideTooltip() { hoverInfo.style.display = 'none'; }
 window.focusOnPoint = (x, z) => {
-    const tx = 200 - (x+OFFSET)*viewState.zoom;
-    const tz = 200 - (z+OFFSET)*viewState.zoom;
-    viewState.x = tx; viewState.y = tz; viewState.zoom = 2;
+    viewState.zoom = 2;
+    viewState.x = 200 - (x+OFFSET)*2;
+    viewState.y = 200 - (z+OFFSET)*2;
     updateViewTransformation();
 };
 
