@@ -39,9 +39,81 @@ const layers = {
 };
 const hoverInfo = document.getElementById('hover-info');
 
+const mapSvg = document.getElementById('map-svg');
+const viewport = document.getElementById('svg-viewport');
+const toggleCircles = document.getElementById('toggle-circles');
+const resetButton = document.getElementById('reset-view');
+
+let viewState = {
+    x: 0,
+    y: 0,
+    zoom: 1,
+    isDragging: false,
+    startX: 0,
+    startY: 0
+};
+
+// --- ZOOM & PAN ---
+
+mapSvg.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const zoomSpeed = 0.001;
+    const delta = -e.deltaY;
+    const factor = Math.pow(1.1, delta / 100);
+    
+    const rect = mapSvg.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Zoom k pozici myši
+    const newZoom = Math.min(Math.max(viewState.zoom * factor, 0.5), 10);
+    const actualFactor = newZoom / viewState.zoom;
+
+    viewState.x = mouseX - (mouseX - viewState.x) * actualFactor;
+    viewState.y = mouseY - (mouseY - viewState.y) * actualFactor;
+    viewState.zoom = newZoom;
+
+    updateViewTransformation();
+});
+
+mapSvg.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    viewState.isDragging = true;
+    viewState.startX = e.clientX - viewState.x;
+    viewState.startY = e.clientY - viewState.y;
+});
+
+window.addEventListener('mousemove', (e) => {
+    if (!viewState.isDragging) return;
+    viewState.x = e.clientX - viewState.startX;
+    viewState.y = e.clientY - viewState.startY;
+    updateViewTransformation();
+});
+
+window.addEventListener('mouseup', () => {
+    viewState.isDragging = false;
+});
+
+function updateViewTransformation() {
+    viewport.setAttribute('transform', `translate(${viewState.x}, ${viewState.y}) scale(${viewState.zoom})`);
+}
+
+resetButton.addEventListener('click', () => {
+    viewState = { x: 0, y: 0, zoom: 1, isDragging: false, startX: 0, startY: 0 };
+    updateViewTransformation();
+});
+
+// --- TOGGLE CIRCLES ---
+
+toggleCircles.addEventListener('change', () => {
+    layers.circles.classList.toggle('hidden', !toggleCircles.checked);
+});
+
 // --- POMOCNÉ FUNKCE ---
 
 function getCurrentDateStr() {
+// ... beze změny ...
+
     const now = new Date();
     return now.toISOString().split('T')[0];
 }
@@ -88,17 +160,44 @@ function updateUI() {
 
     measurements.sort((a, b) => b.timestamp - a.timestamp).forEach(m => {
         const tr = document.createElement('tr');
+        tr.setAttribute('data-id', m.id);
         tr.innerHTML = `
             <td><span class="mono">${m.x} / ${m.z}</span></td>
             <td><span class="mono">${m.r}</span></td>
             <td><button class="btn-del-small" data-id="${m.id}" title="Smazat">✕</button></td>
         `;
+
+        tr.onmouseenter = () => highlightMeasurement(m.id);
+        tr.onmouseleave = () => resetHighlight();
+
         tableBody.appendChild(tr);
     });
 
     document.querySelectorAll('.btn-del-small').forEach(btn => {
-        btn.onclick = () => deleteMeasurement(btn.dataset.id);
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            deleteMeasurement(btn.dataset.id);
+        };
     });
+}
+
+function highlightMeasurement(id) {
+    document.querySelectorAll('.svg-measurement-circle').forEach(c => {
+        if (c.getAttribute('data-id') === id) {
+            c.classList.add('highlight');
+        } else {
+            c.classList.add('dimmed');
+        }
+    });
+    const row = document.querySelector(`tr[data-id="${id}"]`);
+    if (row) row.classList.add('highlight-row');
+}
+
+function resetHighlight() {
+    document.querySelectorAll('.svg-measurement-circle').forEach(c => {
+        c.classList.remove('highlight', 'dimmed');
+    });
+    document.querySelectorAll('tr').forEach(r => r.classList.remove('highlight-row'));
 }
 
 async function deleteMeasurement(id) {
@@ -152,14 +251,19 @@ function renderSVG() {
     }
 
     layers.circles.innerHTML = '';
+    const circleOpacity = Math.max(0.1, 0.4 - (measurements.length * 0.02));
+
     measurements.forEach(m => {
         const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         circle.setAttribute("cx", toCoord(m.x));
         circle.setAttribute("cy", toCoord(m.z));
         circle.setAttribute("r", m.r);
         circle.setAttribute("fill", "url(#circle-grad)");
-        circle.setAttribute("stroke", "rgba(56, 189, 248, 0.4)");
+        circle.setAttribute("stroke", "rgba(56, 189, 248, 0.5)");
         circle.setAttribute("stroke-width", "1");
+        circle.setAttribute("class", "svg-measurement-circle");
+        circle.setAttribute("data-id", m.id);
+        circle.style.opacity = circleOpacity;
         layers.circles.appendChild(circle);
     });
 

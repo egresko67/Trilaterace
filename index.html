@@ -93,7 +93,14 @@
         <main class="main-content">
             <div class="map-wrapper">
                 <div class="map-controls">
-                    <button id="reset-view" title="Resetovat pohled">🏠</button>
+                    <div class="control-group">
+                        <button id="reset-view" title="Resetovat pohled">🏠</button>
+                        <label class="switch-label">
+                            <input type="checkbox" id="toggle-circles" checked>
+                            <span class="slider"></span>
+                            <span class="label-text">Zobrazit kružnice</span>
+                        </label>
+                    </div>
                     <div class="legend">
                         <span class="legend-item"><i class="poi"></i> Odhad vejce</span>
                         <span class="legend-item"><i class="player"></i> Pozice</span>
@@ -101,7 +108,6 @@
                 </div>
                 <div class="map-container" id="map-container">
                     <svg id="map-svg" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
-                        <!-- Grid and elements will be generated here -->
                         <defs>
                             <radialGradient id="circle-grad" cx="50%" cy="50%" r="50%">
                                 <stop offset="0%" stop-color="var(--primary)" stop-opacity="0" />
@@ -115,10 +121,12 @@
                                 </feMerge>
                             </filter>
                         </defs>
-                        <g id="svg-grid-layer"></g>
-                        <g id="svg-circles-layer"></g>
-                        <g id="svg-intersections-layer"></g>
-                        <g id="svg-players-layer"></g>
+                        <g id="svg-viewport">
+                            <g id="svg-grid-layer"></g>
+                            <g id="svg-circles-layer"></g>
+                            <g id="svg-intersections-layer"></g>
+                            <g id="svg-players-layer"></g>
+                        </g>
                     </svg>
                     <div id="hover-info" class="hover-tooltip"></div>
                 </div>
