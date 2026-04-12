@@ -97,13 +97,10 @@ window.addEventListener('mouseup', () => {
 });
 
 function updateViewTransformation() {
-    // Omezení posunu (pan limits)
     const minPan = 400 * (1 - viewState.zoom);
     const maxPan = 0;
-
     viewState.x = Math.min(Math.max(viewState.x, minPan), maxPan);
     viewState.y = Math.min(Math.max(viewState.y, minPan), maxPan);
-
     viewport.setAttribute('transform', `translate(${viewState.x}, ${viewState.y}) scale(${viewState.zoom})`);
 }
 
@@ -112,8 +109,6 @@ resetButton.addEventListener('click', () => {
     updateViewTransformation();
 });
 
-// --- TOGGLE CIRCLES ---
-
 toggleCircles.addEventListener('change', () => {
     layers.circles.classList.toggle('hidden', !toggleCircles.checked);
 });
@@ -121,8 +116,6 @@ toggleCircles.addEventListener('change', () => {
 // --- POMOCNÉ FUNKCE ---
 
 function getCurrentDateStr() {
-// ... beze změny ...
-
     const now = new Date();
     return now.toISOString().split('T')[0];
 }
@@ -136,11 +129,9 @@ function updateResetTimer() {
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(0, 0, 0, 0);
-    
     const diff = tomorrow - now;
     const hours = Math.floor(diff / 3600000);
     const minutes = Math.floor((diff % 3600000) / 60000);
-    
     timeToResetSpan.textContent = `${hours}h ${minutes}m`;
 }
 
@@ -148,12 +139,18 @@ function toCoord(val) {
     return parseFloat(val) + OFFSET;
 }
 
+function getConfidenceColor(conf) {
+    if (conf >= 4) return 'var(--success)';
+    if (conf >= 3) return '#fbbf24';
+    if (conf >= 2) return 'var(--accent)';
+    return 'var(--text-dim)';
+}
+
 // --- LOGIKA DAT ---
 
 function loadData() {
     const dateStr = getCurrentDateStr();
     const dataRef = ref(db, `measurements/${dateStr}`);
-
     onValue(dataRef, (snapshot) => {
         const data = snapshot.val();
         measurements = data ? Object.entries(data).map(([id, val]) => ({ id, ...val })) : [];
@@ -166,7 +163,6 @@ function loadData() {
 function updateUI() {
     tableBody.innerHTML = '';
     countSpan.textContent = measurements.length;
-
     measurements.sort((a, b) => b.timestamp - a.timestamp).forEach(m => {
         const tr = document.createElement('tr');
         tr.setAttribute('data-id', m.id);
@@ -175,13 +171,10 @@ function updateUI() {
             <td><span class="mono">${m.r}</span></td>
             <td><button class="btn-del-small" data-id="${m.id}" title="Smazat">✕</button></td>
         `;
-
         tr.onmouseenter = () => highlightMeasurement(m.id);
         tr.onmouseleave = () => resetHighlight();
-
         tableBody.appendChild(tr);
     });
-
     document.querySelectorAll('.btn-del-small').forEach(btn => {
         btn.onclick = (e) => {
             e.stopPropagation();
@@ -229,7 +222,6 @@ form.onsubmit = async (e) => {
         r: parseFloat(rInput.value),
         timestamp: timestamp
     };
-
     try {
         const dataRef = ref(db, `measurements/${dateStr}`);
         const newRef = push(dataRef);
@@ -261,7 +253,6 @@ function renderSVG() {
 
     layers.circles.innerHTML = '';
     const circleOpacity = Math.max(0.1, 0.4 - (measurements.length * 0.02));
-
     measurements.forEach(m => {
         const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         circle.setAttribute("cx", toCoord(m.x));
@@ -281,25 +272,23 @@ function renderSVG() {
         const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         point.setAttribute("cx", toCoord(p.x));
         point.setAttribute("cy", toCoord(p.z));
-        
-        // Velikost a styl podle jistoty
+        const confColor = getConfidenceColor(p.confidence);
         const radius = p.isMajor ? Math.min(6 + p.confidence, 12) : 5;
         point.setAttribute("r", radius);
         point.setAttribute("class", "svg-poi-point");
-        if (p.isMajor) point.style.filter = `drop-shadow(0 0 ${p.confidence * 2}px var(--accent))`;
-        
-        // Animace (rychlejší pro body s vyšší jistotou)
+        point.style.fill = confColor;
+        if (p.isMajor) {
+            point.style.filter = `drop-shadow(0 0 ${p.confidence * 2}px ${confColor})`;
+        }
         const anim = document.createElementNS("http://www.w3.org/2000/svg", "animate");
         anim.setAttribute("attributeName", "r");
         anim.setAttribute("values", `${radius-0.5};${radius+0.5};${radius-0.5}`);
         anim.setAttribute("dur", p.isMajor ? "1.5s" : "3s");
         anim.setAttribute("repeatCount", "indefinite");
         point.appendChild(anim);
-
         point.addEventListener('mouseenter', (e) => showTooltip(e, p));
         point.addEventListener('mousemove', (e) => moveTooltip(e));
         point.addEventListener('mouseleave', () => hideTooltip());
-        
         layers.intersections.appendChild(point);
     });
 
@@ -320,19 +309,14 @@ function calculateIntersections() {
         intersections = [];
         return;
     }
-
-    // 1. Získat všechny možné průsečíky párů kružnic
     for (let i = 0; i < measurements.length; i++) {
         for (let j = i + 1; j < measurements.length; j++) {
             const pts = getCircleIntersections(measurements[i], measurements[j]);
             if (pts) allIntersections.push(...pts);
         }
     }
-
-    // 2. Shlukování (Clustering) - Najít body, které jsou blízko sebe
     const clusters = [];
     const DISTANCE_THRESHOLD = 15; 
-
     allIntersections.forEach(p => {
         let addedToCluster = false;
         for (let cluster of clusters) {
@@ -352,7 +336,6 @@ function calculateIntersections() {
             clusters.push({ center: { x: p.x, z: p.z }, points: [p] });
         }
     });
-
     intersections = clusters.map(c => ({
         x: c.center.x,
         z: c.center.z,
@@ -365,24 +348,18 @@ function getCircleIntersections(c1, c2) {
     const dx = c2.x - c1.x;
     const dz = c2.z - c1.z;
     const d = Math.sqrt(dx * dx + dz * dz);
-
     if (d > c1.r + c2.r || d < Math.abs(c1.r - c2.r) || d === 0) return null;
-
     const a = (c1.r * c1.r - c2.r * c2.r + d * d) / (2 * d);
     const h = Math.sqrt(Math.max(0, c1.r * c1.r - a * a));
     const x2 = c1.x + a * dx / d;
     const z2 = c1.z + a * dz / d;
-
     const rx = -dz * (h / d);
     const rz = dx * (h / d);
-
     return [
         { x: x2 + rx, z: z2 + rz },
         { x: x2 - rx, z: z2 - rz }
     ];
 }
-
-// --- TOOLTIP ---
 
 function showTooltip(e, p) {
     hoverInfo.style.display = 'block';
@@ -394,7 +371,6 @@ function moveTooltip(e) {
     const rect = mapContainer.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
     hoverInfo.style.left = `${x + 15}px`;
     hoverInfo.style.top = `${y + 15}px`;
 }
@@ -402,8 +378,6 @@ function moveTooltip(e) {
 function hideTooltip() {
     hoverInfo.style.display = 'none';
 }
-
-// --- INICIALIZACE ---
 
 updateDateDisplay();
 updateResetTimer();
