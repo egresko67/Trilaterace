@@ -95,7 +95,8 @@ window.addEventListener('mouseup', () => {
 });
 
 function updateViewTransformation() {
-    viewport.setAttribute('transform', `translate(${viewState.x}, ${viewState.y}) scale(${viewState.zoom})`);
+    viewport.style.transform = `translate(${viewState.x}px, ${viewState.y}px) scale(${viewState.zoom})`;
+    viewport.style.transformOrigin = "0 0";
 }
 
 resetButton.addEventListener('click', () => {
