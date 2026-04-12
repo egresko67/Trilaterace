@@ -275,23 +275,25 @@ td {
 /* Tooltip */
 .hover-tooltip {
     position: absolute;
-    background: rgba(15, 23, 42, 0.9);
+    background: rgba(15, 23, 42, 0.95);
     border: 1px solid var(--border);
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 0.75rem;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.8rem;
     pointer-events: none;
     display: none;
-    z-index: 100;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
+    z-index: 1000;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
     color: white;
+    min-width: 120px;
 }
 
 .hover-tooltip strong {
     color: var(--accent);
     display: block;
     margin-bottom: 4px;
+    font-size: 0.85rem;
 }
 
 /* Main Content */
@@ -383,14 +385,16 @@ svg#map-svg {
 .svg-poi-point {
     fill: var(--accent);
     stroke: white;
-    stroke-width: 1;
+    stroke-width: 1.5;
     filter: url(#glow);
     cursor: crosshair;
     transition: r 0.2s;
+    transform-origin: center;
+    transform-box: fill-box;
 }
 
 .svg-poi-point:hover {
-    r: 8;
+    r: 9;
 }
 
 .svg-player-point {
@@ -400,14 +404,13 @@ svg#map-svg {
 }
 
 @keyframes pulse {
-    0% { transform: scale(1); opacity: 0.8; }
-    50% { transform: scale(1.2); opacity: 1; }
-    100% { transform: scale(1); opacity: 0.8; }
+    0% { transform: scale(1); opacity: 0.9; }
+    50% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); opacity: 0.9; }
 }
 
 .svg-poi-point {
     animation: pulse 2s infinite ease-in-out;
-    transform-origin: center;
 }
 
 @media (max-width: 1000px) {

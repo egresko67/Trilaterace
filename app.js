@@ -30,7 +30,7 @@ const tableBody = document.querySelector('#measurements-table tbody');
 const countSpan = document.getElementById('count');
 const dateSpan = document.getElementById('current-date');
 const timeToResetSpan = document.getElementById('time-to-reset');
-const svg = document.getElementById('map-svg');
+const mapContainer = document.getElementById('map-container');
 const layers = {
     grid: document.getElementById('svg-grid-layer'),
     circles: document.getElementById('svg-circles-layer'),
@@ -135,18 +135,15 @@ form.onsubmit = async (e) => {
 // --- RENDER OVÁNÍ (SVG) ---
 
 function renderSVG() {
-    // 1. Grid layer (static part, can be cached but for simplicity we redraw)
     layers.grid.innerHTML = '';
     const step = 50; 
     for (let i = 0; i <= 400; i += step) {
-        // Vertical lines
         const vLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
         vLine.setAttribute("x1", i); vLine.setAttribute("y1", 0);
         vLine.setAttribute("x2", i); vLine.setAttribute("y2", 400);
         vLine.setAttribute("class", i === 200 ? "svg-axis-line" : "svg-grid-line");
         layers.grid.appendChild(vLine);
 
-        // Horizontal lines
         const hLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
         hLine.setAttribute("x1", 0); hLine.setAttribute("y1", i);
         hLine.setAttribute("x2", 400); hLine.setAttribute("y2", i);
@@ -154,7 +151,6 @@ function renderSVG() {
         layers.grid.appendChild(hLine);
     }
 
-    // 2. Circles layer
     layers.circles.innerHTML = '';
     measurements.forEach(m => {
         const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -167,13 +163,12 @@ function renderSVG() {
         layers.circles.appendChild(circle);
     });
 
-    // 3. Intersections layer
     layers.intersections.innerHTML = '';
     intersections.forEach(p => {
         const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         point.setAttribute("cx", toCoord(p.x));
         point.setAttribute("cy", toCoord(p.z));
-        point.setAttribute("r", "5");
+        point.setAttribute("r", "6");
         point.setAttribute("class", "svg-poi-point");
         
         point.addEventListener('mouseenter', (e) => showTooltip(e, p));
@@ -183,7 +178,6 @@ function renderSVG() {
         layers.intersections.appendChild(point);
     });
 
-    // 4. Players layer
     layers.players.innerHTML = '';
     measurements.forEach(m => {
         const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -237,10 +231,13 @@ function showTooltip(e, p) {
 }
 
 function moveTooltip(e) {
-    // The tooltip is relative to the app-layout or main-content, 
-    // but the point is in the SVG. We use client coordinates.
-    hoverInfo.style.left = `${e.clientX + 15}px`;
-    hoverInfo.style.top = `${e.clientY + 15}px`;
+    const rect = mapContainer.getBoundingClientRect();
+    // Position tooltip relative to the map-container (which is position:relative)
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    hoverInfo.style.left = `${x + 15}px`;
+    hoverInfo.style.top = `${y + 15}px`;
 }
 
 function hideTooltip() {
