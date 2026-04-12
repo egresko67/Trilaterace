@@ -158,12 +158,11 @@ function toCoord(val) {
     return parseFloat(val) + OFFSET;
 }
 
-function getConfidenceColor(conf, maxConf) {
-    const ratio = conf / maxConf;
-    if (ratio > 0.8) return 'var(--success)';
-    if (ratio > 0.4) return '#fbbf24';
-    if (ratio > 0.1) return 'var(--accent)';
-    return 'var(--text-dim)';
+function getConfidenceColor(conf) {
+    if (conf >= 100) return '#22c55e'; // Zelená (Potvrzeno)
+    if (conf >= 10) return '#fbbf24';  // Žlutá (Vysoká)
+    if (conf >= 4) return '#f97316';   // Oranžová (Střední)
+    return '#94a3b8';                  // Šedá (Nízká)
 }
 
 // --- LOGIKA DAT ---
@@ -187,7 +186,7 @@ function updateUI() {
         const tr = document.createElement('tr');
         tr.setAttribute('data-id', m.id);
         tr.innerHTML = `
-            <td><span class="mono">${m.x} / ${m.y || 0} / ${m.z}</span></td>
+            <td><span class="mono">${Math.round(m.x)} / ${Math.round(m.y || 0)} / ${Math.round(m.z)}</span></td>
             <td><span class="mono">${m.r}</span></td>
             <td><button class="btn-del-small" data-id="${m.id}" title="Smazat">✕</button></td>
         `;
@@ -271,7 +270,6 @@ function renderSVG() {
         hLine.setAttribute("class", i === 200 ? "svg-axis-line" : "svg-grid-line");
         layers.grid.appendChild(hLine);
 
-        // Grid labels
         if (i % 100 === 0 || i === 200) {
             const val = i - OFFSET;
             const xText = document.createElementNS("http://www.w3.org/2000/svg", "text");
@@ -307,27 +305,28 @@ function renderSVG() {
     });
 
     layers.intersections.innerHTML = '';
-    const maxConf = intersections.length > 0 ? intersections[0].confidence : 1;
     intersections.forEach((p) => {
         const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         point.setAttribute("cx", toCoord(p.x));
         point.setAttribute("cy", toCoord(p.z));
-        const confColor = getConfidenceColor(p.confidence, maxConf);
-        const ratio = p.confidence / maxConf;
-        const radius = ratio > 0.5 ? Math.min(10 + p.confidence/20, 16) : 6;
+        const confColor = getConfidenceColor(p.confidence);
+        const radius = p.confidence >= 100 ? 14 : (p.confidence >= 10 ? 10 : 6);
         point.setAttribute("r", radius);
         point.setAttribute("class", "svg-poi-point");
         point.style.fill = confColor;
-        point.style.opacity = ratio > 0.1 ? 1 : 0.3;
-        if (ratio > 0.5) {
-            point.style.filter = `drop-shadow(0 0 ${p.confidence/10}px ${confColor})`;
+        point.style.opacity = p.confidence >= 2 ? 1 : 0.4;
+        
+        if (p.confidence >= 10) {
+            point.style.filter = `drop-shadow(0 0 8px ${confColor})`;
         }
+        
         const anim = document.createElementNS("http://www.w3.org/2000/svg", "animate");
         anim.setAttribute("attributeName", "r");
         anim.setAttribute("values", `${radius-0.5};${radius+0.5};${radius-0.5}`);
-        anim.setAttribute("dur", ratio > 0.5 ? "1.5s" : "3s");
+        anim.setAttribute("dur", p.confidence >= 100 ? "1s" : "2s");
         anim.setAttribute("repeatCount", "indefinite");
         point.appendChild(anim);
+        
         point.addEventListener('mouseenter', (e) => showTooltip(e, p));
         point.addEventListener('mousemove', (e) => moveTooltip(e));
         point.addEventListener('mouseleave', () => hideTooltip());
@@ -351,6 +350,8 @@ function calculateIntersections() {
     let foundTargets = [];
     const MAX_TARGETS = 10;
     
+    console.log(`--- Start trilaterace (${currentMeasurements.length} měření) ---`);
+    
     for (let t = 0; t < MAX_TARGETS; t++) {
         if (currentMeasurements.length < 3) break;
         
@@ -370,13 +371,12 @@ function calculateIntersections() {
         
         if (allIntersections.length === 0) break;
         
-        // Clusterování v 3D
         const clusters = [];
         allIntersections.forEach(p => {
             let added = false;
             for (let c of clusters) {
                 const dist = Math.sqrt(Math.pow(p.x-c.x,2)+Math.pow(p.y-c.y,2)+Math.pow(p.z-c.z,2));
-                if (dist < 10) {
+                if (dist < 15) { // Zvětšeno na 15 bloků pro robustnost
                     c.pts.push(p);
                     c.x = c.pts.reduce((s,pt)=>s+pt.x,0)/c.pts.length;
                     c.y = c.pts.reduce((s,pt)=>s+pt.y,0)/c.pts.length;
@@ -390,7 +390,6 @@ function calculateIntersections() {
         clusters.sort((a,b) => b.pts.length - a.pts.length);
         const best = clusters[0];
         
-        // Pokud má nejlepší cluster příliš malou jistotu, končíme
         if (best.pts.length < 2) break;
         
         foundTargets.push({
@@ -399,15 +398,16 @@ function calculateIntersections() {
             isMajor: true
         });
         
-        // Successive Cancellation: Odebereme měření, která souhlasí s tímto cílem
+        // Successive Cancellation
+        const beforeCount = currentMeasurements.length;
         currentMeasurements = currentMeasurements.filter(m => {
             const dist = Math.sqrt(Math.pow(m.x-best.x,2)+Math.pow(m.y-best.y,2)+Math.pow(m.z-best.z,2));
-            return Math.abs(dist - m.r) > 5; // Tolerance 5 bloků
+            return Math.abs(dist - m.r) > 10; // Zvětšeno na 10 pro jistější vymazání okolí
         });
+        console.log(`Cíl ${t} nalezen (Jistota: ${best.pts.length}). Odebráno ${beforeCount - currentMeasurements.length} měření. Zbývá ${currentMeasurements.length}.`);
     }
     
     intersections = foundTargets;
-    console.log("Nalezené reálné cíle:", intersections);
 }
 
 function getSphereIntersections(p1, p2, p3) {
@@ -459,7 +459,8 @@ function getSphereIntersections(p1, p2, p3) {
 
 function showTooltip(e, p) {
     hoverInfo.style.display = 'block';
-    hoverInfo.innerHTML = `<strong>Odhad vejce</strong><br>X: ${p.x.toFixed(1)}<br>Y: ${p.y.toFixed(1)}<br>Z: ${p.z.toFixed(1)}<br><small>Jistota: ${p.confidence}</small>`;
+    const confText = p.confidence >= 100 ? "Potvrzeno" : (p.confidence >= 10 ? "Vysoká" : "Střední");
+    hoverInfo.innerHTML = `<strong>Odhad vejce (${confText})</strong><br>X: ${Math.round(p.x)}<br>Y: ${Math.round(p.y)}<br>Z: ${Math.round(p.z)}<br><small>Jistota: ${p.confidence} trojic</small>`;
     moveTooltip(e);
 }
 
