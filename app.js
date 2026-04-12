@@ -53,7 +53,8 @@ mapSvg.addEventListener('wheel', (e) => {
     const mouseY = (e.clientY - rect.top) / rect.height * 400;
     const delta = -e.deltaY;
     const factor = Math.pow(1.1, delta / 100);
-    const newZoom = Math.min(Math.max(viewState.zoom * factor, 1.0), 15);
+    // Umožnit zoom out na 0.5 (vidět až do +/- 400)
+    const newZoom = Math.min(Math.max(viewState.zoom * factor, 0.5), 15);
     const actualFactor = newZoom / viewState.zoom;
     viewState.x = mouseX - (mouseX - viewState.x) * actualFactor;
     viewState.y = mouseY - (mouseY - viewState.y) * actualFactor;
@@ -80,8 +81,13 @@ window.addEventListener('mousemove', (e) => {
     }
     const rect = mapSvg.getBoundingClientRect();
     if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-        const x = Math.round(((e.clientX - rect.left) / rect.width * 400) - OFFSET);
-        const z = Math.round(((e.clientY - rect.top) / rect.height * 400) - OFFSET);
+        // Oprava výpočtu souřadnic pod kurzorem při zoomu/panu
+        const svgPoint = mapSvg.createSVGPoint();
+        svgPoint.x = e.clientX;
+        svgPoint.y = e.clientY;
+        const transformedPoint = svgPoint.matrixTransform(viewport.getScreenCTM().inverse());
+        const x = Math.round(transformedPoint.x - OFFSET);
+        const z = Math.round(transformedPoint.y - OFFSET);
         cursorCoords.textContent = `X: ${x}, Z: ${z}`;
         cursorCoords.style.opacity = '1';
     }
@@ -90,10 +96,8 @@ window.addEventListener('mousemove', (e) => {
 window.addEventListener('mouseup', () => { viewState.isDragging = false; });
 
 function updateViewTransformation() {
-    const minPan = 400 * (1 - viewState.zoom);
-    viewState.x = Math.min(Math.max(viewState.x, minPan), 0);
-    viewState.y = Math.min(Math.max(viewState.y, minPan), 0);
     viewport.setAttribute('transform', `translate(${viewState.x}, ${viewState.y}) scale(${viewState.zoom})`);
+    renderGrid(); // Překreslit mřížku při pohybu
 }
 
 resetButton.addEventListener('click', () => {
@@ -110,9 +114,9 @@ function toCoord(val) { return parseFloat(val) + OFFSET; }
 function getCurrentDateStr() { return new Date().toISOString().split('T')[0]; }
 
 function getConfidenceColor(conf) {
-    if (conf >= 100) return '#22c55e';
-    if (conf >= 10) return '#fbbf24';
-    if (conf >= 4) return '#f97316';
+    if (conf >= 4) return '#22c55e'; // Pro 4 vzorky na cíl je 4+ "vynikající"
+    if (conf >= 3) return '#fbbf24';
+    if (conf >= 2) return '#f97316';
     return '#94a3b8';
 }
 
@@ -160,6 +164,7 @@ function calculateIntersections() {
     let currentMeasurements = [...measurements];
     let foundTargets = [];
     
+    // 1. Odstranit potvrzená vejce
     confirmedEggs.forEach(egg => {
         currentMeasurements = currentMeasurements.filter(m => {
             const d = Math.sqrt(Math.pow(egg.x-m.x,2)+Math.pow(egg.y-m.y,2)+Math.pow(egg.z-m.z,2));
@@ -167,10 +172,12 @@ function calculateIntersections() {
         });
     });
 
+    // 2. Najít zbytek
     const MAX_TARGETS = 10 - confirmedEggs.length;
     for (let t = 0; t < MAX_TARGETS; t++) {
         if (currentMeasurements.length < 3) break;
         let candidates = [];
+        
         for (let i = 0; i < currentMeasurements.length; i++) {
             for (let j = i + 1; j < currentMeasurements.length; j++) {
                 for (let k = j + 1; k < currentMeasurements.length; k++) {
@@ -179,11 +186,13 @@ function calculateIntersections() {
                         pts.forEach(p => {
                             if (p.y >= -64 && p.y <= 320) {
                                 let matchingPoints = [];
-                                measurements.forEach(m => {
+                                // KRITICKÁ OPRAVA: Počítat jistotu pouze z AKTUÁLNÍCH zbývajících měření
+                                currentMeasurements.forEach(m => {
                                     const d = Math.sqrt(Math.pow(p.x-m.x,2)+Math.pow(p.y-m.y,2)+Math.pow(p.z-m.z,2));
                                     if (Math.abs(d - m.r) < 5) matchingPoints.push(m);
                                 });
-                                if (matchingPoints.length >= 3) {
+                                
+                                if (matchingPoints.length >= 2) { // Sníženo na 2 pro zobrazení i slabších shluků
                                     let totalDist = 0; let count = 0;
                                     for(let a=0; a<matchingPoints.length; a++) {
                                         for(let b=a+1; b<matchingPoints.length; b++) {
@@ -199,10 +208,18 @@ function calculateIntersections() {
                 }
             }
         }
+        
         if (candidates.length === 0) break;
         candidates.sort((a, b) => (b.support * 1000 + b.quality) - (a.support * 1000 + a.quality));
         const best = candidates[0];
-        foundTargets.push({ x: best.x, y: best.y, z: best.z, confidence: best.support, quality: Math.min(100, Math.round(best.quality / 2)) });
+        
+        foundTargets.push({ 
+            x: Math.round(best.x), y: Math.round(best.y), z: Math.round(best.z), 
+            confidence: best.support, 
+            quality: Math.min(100, Math.round(best.quality / 2)) 
+        });
+        
+        // Odstranit spotřebovaná měření
         currentMeasurements = currentMeasurements.filter(m => {
             const d = Math.sqrt(Math.pow(best.x-m.x,2)+Math.pow(best.y-m.y,2)+Math.pow(best.z-m.z,2));
             return Math.abs(d - m.r) > 5;
@@ -225,7 +242,7 @@ function updateUI() {
     intersections.forEach(p => {
         const tr = document.createElement('tr');
         const color = getConfidenceColor(p.confidence);
-        tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${p.x},${p.z})">${Math.round(p.x)} / ${Math.round(p.y)} / ${Math.round(p.z)}</span><div style="font-size: 0.6rem; color: #94a3b8">Kvalita: ${p.quality}%</div></td><td><span class="badge" style="color:${color}">${p.confidence}</span></td><td><button class="btn-primary" style="padding:4px 8px; font-size:0.7rem" onclick="confirmEgg(${p.x},${p.y},${p.z})">Ok</button></td>`;
+        tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${p.x},${p.z})">${p.x} / ${p.y} / ${p.z}</span><div style="font-size: 0.6rem; color: #94a3b8">Kvalita: ${p.quality}%</div></td><td><span class="badge" style="color:${color}">${p.confidence}</span></td><td><button class="btn-primary" style="padding:4px 8px; font-size:0.7rem" onclick="confirmEgg(${p.x},${p.y},${p.z})">Ok</button></td>`;
         targetsTableBody.appendChild(tr);
     });
     confirmedTableBody.innerHTML = '';
@@ -236,19 +253,24 @@ function updateUI() {
     });
 }
 
-function renderSVG() {
+function renderGrid() {
     layers.grid.innerHTML = '';
     const step = 50;
-    for (let i = 0; i <= 400; i += step) {
+    // Vykreslit mřížku v širším rozsahu pro zoom-out
+    for (let i = -400; i <= 800; i += step) {
         const vLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        vLine.setAttribute("x1", i); vLine.setAttribute("y1", 0); vLine.setAttribute("x2", i); vLine.setAttribute("y2", 400);
+        vLine.setAttribute("x1", i); vLine.setAttribute("y1", -400); vLine.setAttribute("x2", i); vLine.setAttribute("y2", 800);
         vLine.setAttribute("class", i === 200 ? "svg-axis-line" : "svg-grid-line");
         layers.grid.appendChild(vLine);
         const hLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        hLine.setAttribute("x1", 0); hLine.setAttribute("y1", i); hLine.setAttribute("x2", 400); hLine.setAttribute("y2", i);
+        hLine.setAttribute("x1", -400); hLine.setAttribute("y1", i); hLine.setAttribute("x2", 800); hLine.setAttribute("y2", i);
         hLine.setAttribute("class", i === 200 ? "svg-axis-line" : "svg-grid-line");
         layers.grid.appendChild(hLine);
     }
+}
+
+function renderSVG() {
+    renderGrid();
     layers.circles.innerHTML = '';
     measurements.forEach(m => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -306,7 +328,7 @@ function getSphereIntersections(p1, p2, p3) {
     const zSq=r1*r1-x*x-y*y; if(zSq<-100) return null; const z=Math.sqrt(Math.max(0,zSq)); const base=add(P1,add(mul(ex,x),mul(ey,y))); return [add(base,mul(ez,z)),sub(base,mul(ez,z))];
 }
 
-function showTooltip(e, p) { hoverInfo.style.display = 'block'; hoverInfo.innerHTML = `<strong>Odhad</strong><br>X: ${Math.round(p.x)}<br>Y: ${Math.round(p.y)}<br>Z: ${Math.round(p.z)}<br><small>Kvalita: ${p.quality}%</small>`; moveTooltip(e); }
+function showTooltip(e, p) { hoverInfo.style.display = 'block'; hoverInfo.innerHTML = `<strong>Odhad</strong><br>X: ${p.x}<br>Y: ${p.y}<br>Z: ${p.z}<br><small>Kvalita: ${p.quality}%</small>`; moveTooltip(e); }
 function moveTooltip(e) {
     const rect = hoverInfo.getBoundingClientRect();
     const padding = 15;
@@ -319,7 +341,12 @@ function moveTooltip(e) {
     hoverInfo.style.top = `${y}px`;
 }
 function hideTooltip() { hoverInfo.style.display = 'none'; }
-window.focusOnPoint = (x, z) => { viewState.zoom = 2; viewState.x = 200 - (x+OFFSET)*2; viewState.y = 200 - (z+OFFSET)*2; updateViewTransformation(); };
+window.focusOnPoint = (x, z) => { 
+    viewState.zoom = 2; 
+    viewState.x = 200 - (x+OFFSET)*2; 
+    viewState.y = 200 - (z+OFFSET)*2; 
+    updateViewTransformation(); 
+};
 
 form.onsubmit = async (e) => { e.preventDefault(); const dateStr = getCurrentDateStr(); await push(ref(db, `measurements/${dateStr}`), { x: parseFloat(xInput.value), y: parseFloat(yInput.value), z: parseFloat(zInput.value), r: parseFloat(rInput.value), timestamp: Date.now() }); form.reset(); };
 

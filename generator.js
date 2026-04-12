@@ -17,9 +17,10 @@ function generateData() {
     targets.forEach(t => {
         // Každý cíl bude mít 4 měření (celkem 40)
         for (let i = 0; i < 4; i++) {
-            const pX = t.x + (Math.random() * 100 - 50);
-            const pY = t.y + (Math.random() * 100 - 50);
-            const pZ = t.z + (Math.random() * 100 - 50);
+            // Zcela náhodná pozice hráče na mapě
+            const pX = Math.random() * 400 - 200;
+            const pY = Math.random() * 300 - 64;
+            const pZ = Math.random() * 400 - 200;
             
             const dist = Math.sqrt(
                 Math.pow(pX - t.x, 2) + 
