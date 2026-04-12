@@ -57,16 +57,14 @@ let viewState = {
 
 mapSvg.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const zoomSpeed = 0.001;
+    const rect = mapSvg.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) / rect.width * 400;
+    const mouseY = (e.clientY - rect.top) / rect.height * 400;
+
     const delta = -e.deltaY;
     const factor = Math.pow(1.1, delta / 100);
     
-    const rect = mapSvg.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    // Zoom k pozici myši
-    const newZoom = Math.min(Math.max(viewState.zoom * factor, 0.5), 10);
+    const newZoom = Math.min(Math.max(viewState.zoom * factor, 0.5), 15);
     const actualFactor = newZoom / viewState.zoom;
 
     viewState.x = mouseX - (mouseX - viewState.x) * actualFactor;
@@ -79,14 +77,18 @@ mapSvg.addEventListener('wheel', (e) => {
 mapSvg.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     viewState.isDragging = true;
-    viewState.startX = e.clientX - viewState.x;
-    viewState.startY = e.clientY - viewState.y;
+    const rect = mapSvg.getBoundingClientRect();
+    const scale = 400 / rect.width;
+    viewState.startX = e.clientX * scale - viewState.x;
+    viewState.startY = e.clientY * scale - viewState.y;
 });
 
 window.addEventListener('mousemove', (e) => {
     if (!viewState.isDragging) return;
-    viewState.x = e.clientX - viewState.startX;
-    viewState.y = e.clientY - viewState.startY;
+    const rect = mapSvg.getBoundingClientRect();
+    const scale = 400 / rect.width;
+    viewState.x = e.clientX * scale - viewState.startX;
+    viewState.y = e.clientY * scale - viewState.startY;
     updateViewTransformation();
 });
 
@@ -95,8 +97,7 @@ window.addEventListener('mouseup', () => {
 });
 
 function updateViewTransformation() {
-    viewport.style.transform = `translate(${viewState.x}px, ${viewState.y}px) scale(${viewState.zoom})`;
-    viewport.style.transformOrigin = "0 0";
+    viewport.setAttribute('transform', `translate(${viewState.x}, ${viewState.y}) scale(${viewState.zoom})`);
 }
 
 resetButton.addEventListener('click', () => {
