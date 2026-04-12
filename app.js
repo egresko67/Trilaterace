@@ -2,15 +2,13 @@ import { initializeApp } from "firebase/app";
 import { getDatabase, ref, onValue, push, set, remove } from "firebase/database";
 
 // --- KONFIGURACE FIREBASE ---
-// POZNÁMKA: Uživatel musí nahradit tyto hodnoty svými vlastními z Firebase Console!
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "trilaterace-therapie.firebaseapp.com",
-    databaseURL: "https://trilaterace-therapie-default-rtdb.firebaseio.com",
-    projectId: "trilaterace-therapie",
-    storageBucket: "trilaterace-therapie.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyCoMnZyBg6IV6H_NPuX40c2dbrChCkYPCs",
+  authDomain: "trilaterace.firebaseapp.com",
+  projectId: "trilaterace",
+  storageBucket: "trilaterace.firebasestorage.app",
+  messagingSenderId: "542609606032",
+  appId: "1:542609606032:web:b9fa594544d7e429f15f15"
 };
 
 // Inicializace Firebase
