@@ -65,11 +65,6 @@ function toCanvas(coord) {
     return (parseFloat(coord) + OFFSET) * scale;
 }
 
-function fromCanvas(pixel) {
-    const scale = MAP_SIZE / canvas.width;
-    return (pixel * scale) - OFFSET;
-}
-
 function resizeCanvas() {
     const container = canvas.parentElement;
     const size = Math.min(container.clientWidth, container.clientHeight);
@@ -257,8 +252,13 @@ function getCircleIntersections(c1, c2) {
 
 canvas.onmousemove = (e) => {
     const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    
+    // Scale mouse coordinates to match canvas internal resolution
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
     
     let found = false;
     for (const p of intersections) {
@@ -268,8 +268,13 @@ canvas.onmousemove = (e) => {
         
         if (dist < 10) {
             hoverInfo.style.display = 'block';
-            hoverInfo.style.left = `${mx + 15}px`;
-            hoverInfo.style.top = `${my + 15}px`;
+            
+            // Position tooltip relative to the cursor (in CSS pixels)
+            const cssMx = e.clientX - rect.left;
+            const cssMy = e.clientY - rect.top;
+            
+            hoverInfo.style.left = `${cssMx + 15}px`;
+            hoverInfo.style.top = `${cssMy + 15}px`;
             hoverInfo.innerHTML = `<strong>Odhad vejce</strong><br>X: ${p.x.toFixed(1)}<br>Z: ${p.z.toFixed(1)}`;
             canvas.style.cursor = 'crosshair';
             found = true;
