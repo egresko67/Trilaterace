@@ -94,8 +94,13 @@ function updateUI() {
 }
 
 async function deleteMeasurement(id) {
-    const dateStr = getCurrentDateStr();
-    await remove(ref(db, `measurements/${dateStr}/${id}`));
+    try {
+        const dateStr = getCurrentDateStr();
+        await remove(ref(db, `measurements/${dateStr}/${id}`));
+    } catch (error) {
+        console.error("Chyba při mazání:", error);
+        alert("Nemáte oprávnění mazat záznamy. Upravte Firebase Rules.");
+    }
 }
 
 form.onsubmit = async (e) => {
