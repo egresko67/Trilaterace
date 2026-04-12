@@ -97,6 +97,12 @@
                         <span class="dot accent"></span>
                         <h2>Potvrzená vejce 🥚</h2>
                     </div>
+                    <div class="manual-confirm" style="margin-bottom: 12px; display: flex; gap: 4px;">
+                        <input type="number" id="conf-x" placeholder="X" style="width: 60px; padding: 4px; background: #0f172a; border: 1px solid var(--border); color: white; border-radius: 4px;">
+                        <input type="number" id="conf-y" placeholder="Y" style="width: 60px; padding: 4px; background: #0f172a; border: 1px solid var(--border); color: white; border-radius: 4px;">
+                        <input type="number" id="conf-z" placeholder="Z" style="width: 60px; padding: 4px; background: #0f172a; border: 1px solid var(--border); color: white; border-radius: 4px;">
+                        <button onclick="addManualEgg()" class="btn-primary" style="padding: 4px 12px; font-weight: bold;">+</button>
+                    </div>
                     <div class="table-container">
                         <table id="confirmed-table">
                             <thead>
@@ -200,7 +206,7 @@
       }
     }
     </script>
-    <script type="module" src="app.js?v=2.19"></script>
+    <script type="module" src="app.js?v=2.20"></script>
 </body>
 </html>
 
