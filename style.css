@@ -389,28 +389,6 @@ svg#map-svg {
     filter: url(#glow);
     cursor: crosshair;
     transition: r 0.2s;
-    transform-origin: center;
-    transform-box: fill-box;
-}
-
-.svg-poi-point:hover {
-    r: 9;
-}
-
-.svg-player-point {
-    fill: var(--danger);
-    stroke: rgba(255,255,255,0.5);
-    stroke-width: 1;
-}
-
-@keyframes pulse {
-    0% { r: 6; opacity: 0.8; }
-    50% { r: 8; opacity: 1; }
-    100% { r: 6; opacity: 0.8; }
-}
-
-.svg-poi-point {
-    animation: pulse 2s infinite ease-in-out;
 }
 
 @media (max-width: 1000px) {

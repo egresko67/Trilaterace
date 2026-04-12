@@ -171,6 +171,22 @@ function renderSVG() {
         point.setAttribute("r", "6");
         point.setAttribute("class", "svg-poi-point");
         
+        // Native SVG Animation for radius (r)
+        const anim = document.createElementNS("http://www.w3.org/2000/svg", "animate");
+        anim.setAttribute("attributeName", "r");
+        anim.setAttribute("values", "5.5;7.5;5.5");
+        anim.setAttribute("dur", "2.5s");
+        anim.setAttribute("repeatCount", "indefinite");
+        point.appendChild(anim);
+
+        // Native SVG Animation for opacity
+        const animOp = document.createElementNS("http://www.w3.org/2000/svg", "animate");
+        animOp.setAttribute("attributeName", "opacity");
+        animOp.setAttribute("values", "0.7;1;0.7");
+        animOp.setAttribute("dur", "2.5s");
+        animOp.setAttribute("repeatCount", "indefinite");
+        point.appendChild(animOp);
+
         point.addEventListener('mouseenter', (e) => showTooltip(e, p));
         point.addEventListener('mousemove', (e) => moveTooltip(e));
         point.addEventListener('mouseleave', () => hideTooltip());
@@ -232,7 +248,6 @@ function showTooltip(e, p) {
 
 function moveTooltip(e) {
     const rect = mapContainer.getBoundingClientRect();
-    // Position tooltip relative to the map-container (which is position:relative)
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
