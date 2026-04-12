@@ -28,6 +28,7 @@ const yInput = document.getElementById('y-coord');
 const zInput = document.getElementById('z-coord');
 const rInput = document.getElementById('radius');
 const tableBody = document.querySelector('#measurements-table tbody');
+const targetsTableBody = document.querySelector('#targets-table tbody');
 const countSpan = document.getElementById('count');
 const dateSpan = document.getElementById('current-date');
 const timeToResetSpan = document.getElementById('time-to-reset');
@@ -102,7 +103,6 @@ window.addEventListener('mousemove', (e) => {
         updateViewTransformation();
     }
 
-    // Update cursor coordinates
     const rect = mapSvg.getBoundingClientRect();
     if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
         const x = Math.round(((e.clientX - rect.left) / rect.width * 400) - OFFSET);
@@ -159,10 +159,19 @@ function toCoord(val) {
 }
 
 function getConfidenceColor(conf) {
-    if (conf >= 100) return '#22c55e'; // Zelená (Potvrzeno)
-    if (conf >= 10) return '#fbbf24';  // Žlutá (Vysoká)
-    if (conf >= 4) return '#f97316';   // Oranžová (Střední)
-    return '#94a3b8';                  // Šedá (Nízká)
+    if (conf >= 100) return '#22c55e';
+    if (conf >= 10) return '#fbbf24';
+    if (conf >= 4) return '#f97316';
+    return '#94a3b8';
+}
+
+function focusOnPoint(x, z) {
+    const targetX = toCoord(x);
+    const targetZ = toCoord(z);
+    viewState.zoom = 4;
+    viewState.x = 200 - (targetX * 4);
+    viewState.y = 200 - (targetZ * 4);
+    updateViewTransformation();
 }
 
 // --- LOGIKA DAT ---
@@ -180,6 +189,7 @@ function loadData() {
 }
 
 function updateUI() {
+    // Tabulka měření
     tableBody.innerHTML = '';
     countSpan.textContent = measurements.length;
     measurements.sort((a, b) => b.timestamp - a.timestamp).forEach(m => {
@@ -200,6 +210,19 @@ function updateUI() {
             deleteMeasurement(btn.dataset.id);
         };
     });
+
+    // Tabulka cílů
+    targetsTableBody.innerHTML = '';
+    intersections.forEach((p, idx) => {
+        const tr = document.createElement('tr');
+        const color = getConfidenceColor(p.confidence);
+        tr.innerHTML = `
+            <td><span class="mono clickable" style="border-left: 3px solid ${color}; padding-left: 8px;">${Math.round(p.x)} / ${Math.round(p.y)} / ${Math.round(p.z)}</span></td>
+            <td><span class="badge" style="background: ${color}22; color: ${color}">${p.confidence}</span></td>
+        `;
+        tr.onclick = () => focusOnPoint(p.x, p.z);
+        targetsTableBody.appendChild(tr);
+    });
 }
 
 function highlightMeasurement(id) {
@@ -210,15 +233,12 @@ function highlightMeasurement(id) {
             c.classList.add('dimmed');
         }
     });
-    const row = document.querySelector(`tr[data-id="${id}"]`);
-    if (row) row.classList.add('highlight-row');
 }
 
 function resetHighlight() {
     document.querySelectorAll('.svg-measurement-circle').forEach(c => {
         c.classList.remove('highlight', 'dimmed');
     });
-    document.querySelectorAll('tr').forEach(r => r.classList.remove('highlight-row'));
 }
 
 async function deleteMeasurement(id) {
@@ -289,14 +309,14 @@ function renderSVG() {
     }
 
     layers.circles.innerHTML = '';
-    const circleOpacity = Math.max(0.1, 0.4 - (measurements.length * 0.02));
+    const circleOpacity = Math.max(0.05, 0.3 - (measurements.length * 0.01));
     measurements.forEach(m => {
         const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         circle.setAttribute("cx", toCoord(m.x));
         circle.setAttribute("cy", toCoord(m.z));
         circle.setAttribute("r", m.r);
         circle.setAttribute("fill", "url(#circle-grad)");
-        circle.setAttribute("stroke", "rgba(56, 189, 248, 0.5)");
+        circle.setAttribute("stroke", "rgba(56, 189, 248, 0.3)");
         circle.setAttribute("stroke-width", "1");
         circle.setAttribute("class", "svg-measurement-circle");
         circle.setAttribute("data-id", m.id);
@@ -310,7 +330,7 @@ function renderSVG() {
         point.setAttribute("cx", toCoord(p.x));
         point.setAttribute("cy", toCoord(p.z));
         const confColor = getConfidenceColor(p.confidence);
-        const radius = p.confidence >= 100 ? 14 : (p.confidence >= 10 ? 10 : 6);
+        const radius = p.confidence >= 100 ? 12 : (p.confidence >= 10 ? 9 : 6);
         point.setAttribute("r", radius);
         point.setAttribute("class", "svg-poi-point");
         point.style.fill = confColor;
@@ -350,8 +370,6 @@ function calculateIntersections() {
     let foundTargets = [];
     const MAX_TARGETS = 10;
     
-    console.log(`--- Start trilaterace (${currentMeasurements.length} měření) ---`);
-    
     for (let t = 0; t < MAX_TARGETS; t++) {
         if (currentMeasurements.length < 3) break;
         
@@ -376,7 +394,7 @@ function calculateIntersections() {
             let added = false;
             for (let c of clusters) {
                 const dist = Math.sqrt(Math.pow(p.x-c.x,2)+Math.pow(p.y-c.y,2)+Math.pow(p.z-c.z,2));
-                if (dist < 15) { // Zvětšeno na 15 bloků pro robustnost
+                if (dist < 12) {
                     c.pts.push(p);
                     c.x = c.pts.reduce((s,pt)=>s+pt.x,0)/c.pts.length;
                     c.y = c.pts.reduce((s,pt)=>s+pt.y,0)/c.pts.length;
@@ -394,20 +412,18 @@ function calculateIntersections() {
         
         foundTargets.push({
             x: best.x, y: best.y, z: best.z,
-            confidence: best.pts.length,
-            isMajor: true
+            confidence: best.pts.length
         });
         
         // Successive Cancellation
-        const beforeCount = currentMeasurements.length;
         currentMeasurements = currentMeasurements.filter(m => {
             const dist = Math.sqrt(Math.pow(m.x-best.x,2)+Math.pow(m.y-best.y,2)+Math.pow(m.z-best.z,2));
-            return Math.abs(dist - m.r) > 10; // Zvětšeno na 10 pro jistější vymazání okolí
+            return Math.abs(dist - m.r) > 10;
         });
-        console.log(`Cíl ${t} nalezen (Jistota: ${best.pts.length}). Odebráno ${beforeCount - currentMeasurements.length} měření. Zbývá ${currentMeasurements.length}.`);
     }
     
     intersections = foundTargets;
+    console.log("Nalezené cíle (v2.13):", intersections);
 }
 
 function getSphereIntersections(p1, p2, p3) {
@@ -460,7 +476,7 @@ function getSphereIntersections(p1, p2, p3) {
 function showTooltip(e, p) {
     hoverInfo.style.display = 'block';
     const confText = p.confidence >= 100 ? "Potvrzeno" : (p.confidence >= 10 ? "Vysoká" : "Střední");
-    hoverInfo.innerHTML = `<strong>Odhad vejce (${confText})</strong><br>X: ${Math.round(p.x)}<br>Y: ${Math.round(p.y)}<br>Z: ${Math.round(p.z)}<br><small>Jistota: ${p.confidence} trojic</small>`;
+    hoverInfo.innerHTML = `<strong>Odhad vejce</strong><br>X: ${Math.round(p.x)}<br>Y: ${Math.round(p.y)}<br>Z: ${Math.round(p.z)}<br><small>Jistota: ${p.confidence}</small>`;
     moveTooltip(e);
 }
 
