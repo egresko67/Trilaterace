@@ -385,6 +385,13 @@ input:checked + .slider:before {
     gap: 12px;
 }
 
+.map-main-area {
+    display: flex;
+    gap: 20px;
+    flex: 1;
+    min-height: 0;
+}
+
 .map-container {
     background: #000;
     border-radius: 16px;
@@ -392,104 +399,30 @@ input:checked + .slider:before {
     position: relative;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
     border: 2px solid var(--border);
-    flex: 1;
+    flex: 3;
     cursor: grab;
 }
 
-.map-container:active {
-    cursor: grabbing;
-}
-
-.coord-display {
-    position: absolute;
-    bottom: 12px;
-    left: 12px;
-    background: rgba(15, 23, 42, 0.8);
-    backdrop-filter: blur(4px);
-    border: 1px solid var(--border);
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.7rem;
-    color: var(--primary);
-    pointer-events: none;
-    z-index: 5;
-}
-
-#svg-circles-layer {
-    transition: opacity 0.3s ease;
-}
-
-#svg-circles-layer.hidden {
-    opacity: 0;
-    pointer-events: none;
-}
-
-svg#map-svg {
-    width: 100%;
-    height: 100%;
-    display: block;
-    user-select: none;
-}
-
-.map-controls {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-#reset-view {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    color: white;
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    cursor: pointer;
-}
-
 .legend {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
     background: var(--bg-card);
-    padding: 12px;
-    border-radius: 10px;
+    padding: 20px;
+    border-radius: 12px;
     border: 1px solid var(--border);
+    height: fit-content;
+    min-width: 180px;
 }
 
-.legend-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+/* Player Point */
+.svg-player-point {
+    fill: var(--danger);
+    stroke: white;
+    stroke-width: 1;
 }
 
-.legend-title {
-    font-size: 0.65rem;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    letter-spacing: 0.05em;
-    font-weight: 700;
-}
-
-.legend-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.75rem;
-    color: var(--text-main);
-}
-
-.legend-item i {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-}
-
-.legend-item i.poi-low { background: #94a3b8; }
-.legend-item i.poi-mid { background: var(--accent); }
-.legend-item i.poi-high { background: #fbbf24; }
-.legend-item i.poi-max { background: var(--success); box-shadow: 0 0 8px var(--success); }
 .legend-item i.player { background: var(--danger); }
 
 /* SVG specific styling */

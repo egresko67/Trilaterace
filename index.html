@@ -101,6 +101,33 @@
                             <span class="label-text">Zobrazit kružnice</span>
                         </label>
                     </div>
+                </div>
+                <div class="map-main-area">
+                    <div class="map-container" id="map-container">
+                        <div id="cursor-coords" class="coord-display">X: 0, Z: 0</div>
+                        <svg id="map-svg" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
+                            <defs>
+                                <radialGradient id="circle-grad" cx="50%" cy="50%" r="50%">
+                                    <stop offset="0%" stop-color="var(--primary)" stop-opacity="0" />
+                                    <stop offset="100%" stop-color="var(--primary)" stop-opacity="0.15" />
+                                </radialGradient>
+                                <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                                    <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                                    <feMerge>
+                                        <feMergeNode in="coloredBlur"/>
+                                        <feMergeNode in="SourceGraphic"/>
+                                    </feMerge>
+                                </filter>
+                            </defs>
+                            <g id="svg-viewport">
+                                <g id="svg-grid-layer"></g>
+                                <g id="svg-circles-layer"></g>
+                                <g id="svg-intersections-layer"></g>
+                                <g id="svg-players-layer"></g>
+                            </g>
+                        </svg>
+                        <div id="hover-info" class="hover-tooltip"></div>
+                    </div>
                     <div class="legend">
                         <div class="legend-group">
                             <span class="legend-title">Jistota odhadu</span>
@@ -114,31 +141,6 @@
                             <span class="legend-item"><i class="player"></i> Pozice hráče</span>
                         </div>
                     </div>
-                </div>
-                <div class="map-container" id="map-container">
-                    <div id="cursor-coords" class="coord-display">X: 0, Z: 0</div>
-                    <svg id="map-svg" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
-                        <defs>
-                            <radialGradient id="circle-grad" cx="50%" cy="50%" r="50%">
-                                <stop offset="0%" stop-color="var(--primary)" stop-opacity="0" />
-                                <stop offset="100%" stop-color="var(--primary)" stop-opacity="0.15" />
-                            </radialGradient>
-                            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-                                <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                                <feMerge>
-                                    <feMergeNode in="coloredBlur"/>
-                                    <feMergeNode in="SourceGraphic"/>
-                                </feMerge>
-                            </filter>
-                        </defs>
-                        <g id="svg-viewport">
-                            <g id="svg-grid-layer"></g>
-                            <g id="svg-circles-layer"></g>
-                            <g id="svg-intersections-layer"></g>
-                            <g id="svg-players-layer"></g>
-                        </g>
-                    </svg>
-                    <div id="hover-info" class="hover-tooltip"></div>
                 </div>
             </div>
         </main>
