@@ -400,6 +400,22 @@ input:checked + .slider:before {
     cursor: grabbing;
 }
 
+.coord-display {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    background: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(4px);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--primary);
+    pointer-events: none;
+    z-index: 5;
+}
+
 #svg-circles-layer {
     transition: opacity 0.3s ease;
 }
@@ -434,30 +450,60 @@ svg#map-svg {
 
 .legend {
     display: flex;
-    gap: 16px;
+    flex-direction: column;
+    gap: 12px;
+    background: var(--bg-card);
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+}
+
+.legend-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.legend-title {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+    font-weight: 700;
 }
 
 .legend-item {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     font-size: 0.75rem;
-    color: var(--text-dim);
+    color: var(--text-main);
 }
 
 .legend-item i {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
 }
 
-.legend-item i.poi { background: var(--accent); }
+.legend-item i.poi-low { background: #94a3b8; }
+.legend-item i.poi-mid { background: var(--accent); }
+.legend-item i.poi-high { background: #fbbf24; }
+.legend-item i.poi-max { background: var(--success); box-shadow: 0 0 8px var(--success); }
 .legend-item i.player { background: var(--danger); }
 
 /* SVG specific styling */
 .svg-grid-line {
     stroke: #1e293b;
     stroke-width: 0.5;
+}
+
+.svg-grid-text {
+    fill: #475569;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    pointer-events: none;
+    user-select: none;
 }
 
 .svg-axis-line {

@@ -38,6 +38,7 @@ const layers = {
     players: document.getElementById('svg-players-layer')
 };
 const hoverInfo = document.getElementById('hover-info');
+const cursorCoords = document.getElementById('cursor-coords');
 
 const mapSvg = document.getElementById('map-svg');
 const viewport = document.getElementById('svg-viewport');
@@ -84,12 +85,19 @@ mapSvg.addEventListener('mousedown', (e) => {
 });
 
 window.addEventListener('mousemove', (e) => {
-    if (!viewState.isDragging) return;
+    if (viewState.isDragging) {
+        const rect = mapSvg.getBoundingClientRect();
+        const scale = 400 / rect.width;
+        viewState.x = e.clientX * scale - viewState.startX;
+        viewState.y = e.clientY * scale - viewState.startY;
+        updateViewTransformation();
+    }
+
+    // Update cursor coordinates
     const rect = mapSvg.getBoundingClientRect();
-    const scale = 400 / rect.width;
-    viewState.x = e.clientX * scale - viewState.startX;
-    viewState.y = e.clientY * scale - viewState.startY;
-    updateViewTransformation();
+    const x = Math.round(((e.clientX - rect.left) / rect.width * 400) - OFFSET);
+    const z = Math.round(((e.clientY - rect.top) / rect.height * 400) - OFFSET);
+    cursorCoords.textContent = `X: ${x}, Z: ${z}`;
 });
 
 window.addEventListener('mouseup', () => {
@@ -249,6 +257,24 @@ function renderSVG() {
         hLine.setAttribute("x2", 400); hLine.setAttribute("y2", i);
         hLine.setAttribute("class", i === 200 ? "svg-axis-line" : "svg-grid-line");
         layers.grid.appendChild(hLine);
+
+        // Grid labels
+        if (i % 100 === 0 || i === 200) {
+            const val = i - OFFSET;
+            const xText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            xText.setAttribute("x", i + 2);
+            xText.setAttribute("y", 12);
+            xText.setAttribute("class", "svg-grid-text");
+            xText.textContent = val;
+            layers.grid.appendChild(xText);
+
+            const zText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            zText.setAttribute("x", 2);
+            zText.setAttribute("y", i - 2);
+            zText.setAttribute("class", "svg-grid-text");
+            zText.textContent = val;
+            layers.grid.appendChild(zText);
+        }
     }
 
     layers.circles.innerHTML = '';
