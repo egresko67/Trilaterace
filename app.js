@@ -84,6 +84,14 @@ mapSvg.addEventListener('mousedown', (e) => {
     viewState.startY = e.clientY * scale - viewState.y;
 });
 
+mapSvg.addEventListener('mouseenter', () => {
+    cursorCoords.style.opacity = '1';
+});
+
+mapSvg.addEventListener('mouseleave', () => {
+    cursorCoords.style.opacity = '0';
+});
+
 window.addEventListener('mousemove', (e) => {
     if (viewState.isDragging) {
         const rect = mapSvg.getBoundingClientRect();
@@ -95,9 +103,11 @@ window.addEventListener('mousemove', (e) => {
 
     // Update cursor coordinates
     const rect = mapSvg.getBoundingClientRect();
-    const x = Math.round(((e.clientX - rect.left) / rect.width * 400) - OFFSET);
-    const z = Math.round(((e.clientY - rect.top) / rect.height * 400) - OFFSET);
-    cursorCoords.textContent = `X: ${x}, Z: ${z}`;
+    if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        const x = Math.round(((e.clientX - rect.left) / rect.width * 400) - OFFSET);
+        const z = Math.round(((e.clientY - rect.top) / rect.height * 400) - OFFSET);
+        cursorCoords.textContent = `X: ${x}, Z: ${z}`;
+    }
 });
 
 window.addEventListener('mouseup', () => {
@@ -323,9 +333,9 @@ function renderSVG() {
         const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         point.setAttribute("cx", toCoord(m.x));
         point.setAttribute("cy", toCoord(m.z));
-        point.setAttribute("r", "3.5");
+        point.setAttribute("r", "2"); // Reduced from 3.5 to 2
         point.setAttribute("class", "svg-player-point");
-        point.style.fill = 'var(--danger)'; // Explicitly set color
+        point.style.fill = 'var(--danger)';
         layers.players.appendChild(point);
     });
 }
