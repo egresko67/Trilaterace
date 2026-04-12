@@ -487,10 +487,22 @@ function showTooltip(e, p) {
 
 function moveTooltip(e) {
     const rect = mapContainer.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    hoverInfo.style.left = `${x + 15}px`;
-    hoverInfo.style.top = `${y + 15}px`;
+    const tooltipRect = hoverInfo.getBoundingClientRect();
+    
+    let x = e.clientX - rect.left + 15;
+    let y = e.clientY - rect.top + 15;
+    
+    // Kontrola pravého okraje
+    if (x + tooltipRect.width > rect.width) {
+        x = e.clientX - rect.left - tooltipRect.width - 15;
+    }
+    // Kontrola spodního okraje
+    if (y + tooltipRect.height > rect.height) {
+        y = e.clientY - rect.top - tooltipRect.height - 15;
+    }
+    
+    hoverInfo.style.left = `${x}px`;
+    hoverInfo.style.top = `${y}px`;
 }
 
 function hideTooltip() {
