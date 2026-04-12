@@ -64,7 +64,7 @@ mapSvg.addEventListener('wheel', (e) => {
     const delta = -e.deltaY;
     const factor = Math.pow(1.1, delta / 100);
     
-    const newZoom = Math.min(Math.max(viewState.zoom * factor, 0.5), 15);
+    const newZoom = Math.min(Math.max(viewState.zoom * factor, 1.0), 15);
     const actualFactor = newZoom / viewState.zoom;
 
     viewState.x = mouseX - (mouseX - viewState.x) * actualFactor;
