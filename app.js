@@ -97,6 +97,13 @@ window.addEventListener('mouseup', () => {
 });
 
 function updateViewTransformation() {
+    // Omezení posunu (pan limits)
+    const minPan = 400 * (1 - viewState.zoom);
+    const maxPan = 0;
+
+    viewState.x = Math.min(Math.max(viewState.x, minPan), maxPan);
+    viewState.y = Math.min(Math.max(viewState.y, minPan), maxPan);
+
     viewport.setAttribute('transform', `translate(${viewState.x}, ${viewState.y}) scale(${viewState.zoom})`);
 }
 
@@ -270,18 +277,22 @@ function renderSVG() {
     });
 
     layers.intersections.innerHTML = '';
-    intersections.forEach((p, idx) => {
+    intersections.forEach((p) => {
         const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         point.setAttribute("cx", toCoord(p.x));
         point.setAttribute("cy", toCoord(p.z));
-        point.setAttribute("r", "6");
-        point.setAttribute("class", "svg-poi-point");
         
-        // Subtle native animation
+        // Velikost a styl podle jistoty
+        const radius = p.isMajor ? Math.min(6 + p.confidence, 12) : 5;
+        point.setAttribute("r", radius);
+        point.setAttribute("class", "svg-poi-point");
+        if (p.isMajor) point.style.filter = `drop-shadow(0 0 ${p.confidence * 2}px var(--accent))`;
+        
+        // Animace (rychlejší pro body s vyšší jistotou)
         const anim = document.createElementNS("http://www.w3.org/2000/svg", "animate");
         anim.setAttribute("attributeName", "r");
-        anim.setAttribute("values", "5.5;6.5;5.5");
-        anim.setAttribute("dur", "3s");
+        anim.setAttribute("values", `${radius-0.5};${radius+0.5};${radius-0.5}`);
+        anim.setAttribute("dur", p.isMajor ? "1.5s" : "3s");
         anim.setAttribute("repeatCount", "indefinite");
         point.appendChild(anim);
 
@@ -304,15 +315,50 @@ function renderSVG() {
 }
 
 function calculateIntersections() {
-    intersections = [];
-    if (measurements.length < 2) return;
+    let allIntersections = [];
+    if (measurements.length < 2) {
+        intersections = [];
+        return;
+    }
 
+    // 1. Získat všechny možné průsečíky párů kružnic
     for (let i = 0; i < measurements.length; i++) {
         for (let j = i + 1; j < measurements.length; j++) {
             const pts = getCircleIntersections(measurements[i], measurements[j]);
-            if (pts) intersections.push(...pts);
+            if (pts) allIntersections.push(...pts);
         }
     }
+
+    // 2. Shlukování (Clustering) - Najít body, které jsou blízko sebe
+    const clusters = [];
+    const DISTANCE_THRESHOLD = 15; 
+
+    allIntersections.forEach(p => {
+        let addedToCluster = false;
+        for (let cluster of clusters) {
+            const center = cluster.center;
+            const dist = Math.sqrt(Math.pow(p.x - center.x, 2) + Math.pow(p.z - center.z, 2));
+            if (dist < DISTANCE_THRESHOLD) {
+                cluster.points.push(p);
+                cluster.center = {
+                    x: cluster.points.reduce((sum, pt) => sum + pt.x, 0) / cluster.points.length,
+                    z: cluster.points.reduce((sum, pt) => sum + pt.z, 0) / cluster.points.length
+                };
+                addedToCluster = true;
+                break;
+            }
+        }
+        if (!addedToCluster) {
+            clusters.push({ center: { x: p.x, z: p.z }, points: [p] });
+        }
+    });
+
+    intersections = clusters.map(c => ({
+        x: c.center.x,
+        z: c.center.z,
+        confidence: c.points.length,
+        isMajor: c.points.length > 1
+    })).sort((a, b) => b.confidence - a.confidence);
 }
 
 function getCircleIntersections(c1, c2) {
