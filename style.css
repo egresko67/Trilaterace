@@ -404,9 +404,9 @@ svg#map-svg {
 }
 
 @keyframes pulse {
-    0% { transform: scale(1); opacity: 0.9; }
-    50% { transform: scale(1.15); opacity: 1; }
-    100% { transform: scale(1); opacity: 0.9; }
+    0% { r: 6; opacity: 0.8; }
+    50% { r: 8; opacity: 1; }
+    100% { r: 6; opacity: 0.8; }
 }
 
 .svg-poi-point {
