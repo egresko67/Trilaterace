@@ -184,7 +184,8 @@ function calculateIntersections() {
                     const pts = getSphereIntersections(currentMeasurements[i], currentMeasurements[j], currentMeasurements[k]);
                     if (pts) {
                         pts.forEach(p => {
-                            if (p.y >= -64 && p.y <= 320) {
+                            // PŘÍSNÝ FILTR: Pouze body uvnitř herní oblasti
+                            if (p.x >= -200 && p.x <= 200 && p.z >= -200 && p.z <= 200 && p.y >= -64 && p.y <= 320) {
                                 let matchingPoints = [];
                                 // KRITICKÁ OPRAVA: Počítat jistotu pouze z AKTUÁLNÍCH zbývajících měření
                                 currentMeasurements.forEach(m => {
