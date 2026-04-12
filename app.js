@@ -175,7 +175,24 @@ window.deleteEgg = (id) => remove(ref(db, `confirmed_eggs/${getCurrentDateStr()}
 
 window.confirmEgg = async (x, y, z) => {
     const dateStr = getCurrentDateStr();
-    await push(ref(db, `confirmed_eggs/${dateStr}`), { x, y, z, timestamp: Date.now() });
+    await push(ref(db, `confirmed_eggs/${dateStr}`), { 
+        x: Math.round(x), 
+        y: Math.round(y), 
+        z: Math.round(z), 
+        timestamp: Date.now() 
+    });
+};
+
+window.addManualEgg = async () => {
+    const x = document.getElementById('conf-x').value;
+    const y = document.getElementById('conf-y').value;
+    const z = document.getElementById('conf-z').value;
+    if (x && y && z) {
+        await window.confirmEgg(x, y, z);
+        document.getElementById('conf-x').value = '';
+        document.getElementById('conf-y').value = '';
+        document.getElementById('conf-z').value = '';
+    }
 };
 
 // --- RENDER ---
