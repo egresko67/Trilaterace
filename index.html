@@ -3,72 +3,109 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Trilaterace - Therapie</title>
+    <title>Trilaterace - Minecraft POI Finder</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>Trilaterace - Therapie</h1>
-            <p>Dnešní datum: <span id="current-date"></span></p>
-        </header>
+<body class="dark-theme">
+    <div class="app-layout">
+        <aside class="sidebar">
+            <header class="app-header">
+                <div class="logo">
+                    <span class="icon">🎯</span>
+                    <h1>Trilaterace</h1>
+                </div>
+                <div class="status-bar">
+                    <span id="current-date" class="date-tag">2026-04-12</span>
+                    <span class="reset-timer">Reset za <span id="time-to-reset">--:--</span></span>
+                </div>
+            </header>
 
-        <main>
-            <section class="controls">
+            <section class="panel">
                 <div class="card">
-                    <h2>Přidat měření</h2>
-                    <form id="measurement-form">
-                        <div class="form-group">
-                            <label for="x-coord">Pozice X:</label>
-                            <input type="number" id="x-coord" required step="0.1" placeholder="Např. 120">
+                    <div class="card-header">
+                        <span class="dot primary"></span>
+                        <h2>Nové měření</h2>
+                    </div>
+                    <form id="measurement-form" class="modern-form">
+                        <div class="input-row">
+                            <div class="form-group">
+                                <label for="x-coord">X</label>
+                                <input type="number" id="x-coord" required step="0.1" placeholder="0">
+                            </div>
+                            <div class="form-group">
+                                <label for="z-coord">Z</label>
+                                <input type="number" id="z-coord" required step="0.1" placeholder="0">
+                            </div>
                         </div>
                         <div class="form-group">
-                            <label for="z-coord">Pozice Z:</label>
-                            <input type="number" id="z-coord" required step="0.1" placeholder="Např. -45">
+                            <label for="radius">Vzdálenost (Radius)</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="radius" required min="0" step="0.1" placeholder="Vzdálenost k POI">
+                                <span class="unit">bloků</span>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label for="radius">Vzdálenost (R):</label>
-                            <input type="number" id="radius" required min="0" step="0.1" placeholder="Vzdálenost k cíli">
-                        </div>
-                        <button type="submit" id="submit-btn">Odeslat</button>
+                        <button type="submit" id="submit-btn" class="btn-primary">
+                            <span>Přidat data</span>
+                            <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" /></svg>
+                        </button>
                     </form>
                 </div>
 
-                <div class="card info-card">
-                    <h2>Statistiky</h2>
-                    <p>Počet měření: <span id="count">0</span></p>
-                    <p>Hledaných bodů: 10</p>
-                    <p class="reset-note">Reset o půlnoci proběhne automaticky.</p>
+                <div class="card stats-card">
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="stat-value" id="count">0</span>
+                            <span class="stat-label">Měření</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-value">10</span>
+                            <span class="stat-label">Cílů POI</span>
+                        </div>
+                    </div>
                 </div>
-            </section>
 
-            <section class="visualization">
-                <div class="canvas-container">
-                    <canvas id="map-canvas"></canvas>
-                </div>
-            </section>
-
-            <section class="data-list">
-                <div class="card">
-                    <h2>Seznam měření</h2>
-                    <div class="table-scroll">
+                <div class="card measurements-card">
+                    <div class="card-header">
+                        <span class="dot secondary"></span>
+                        <h2>Historie</h2>
+                    </div>
+                    <div class="table-container">
                         <table id="measurements-table">
                             <thead>
                                 <tr>
-                                    <th>X</th>
-                                    <th>Z</th>
+                                    <th>X / Z</th>
                                     <th>R</th>
-                                    <th>Čas</th>
                                     <th>Akce</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <!-- Data se vloží sem -->
+                                <!-- Data inject -->
                             </tbody>
                         </table>
                     </div>
                 </div>
             </section>
+        </aside>
+
+        <main class="main-content">
+            <div class="map-wrapper">
+                <div class="map-controls">
+                    <button id="reset-view" title="Resetovat pohled">🏠</button>
+                    <div class="legend">
+                        <span class="legend-item"><i class="poi"></i> POI Odhad</span>
+                        <span class="legend-item"><i class="player"></i> Pozice</span>
+                    </div>
+                </div>
+                <div class="canvas-container">
+                    <canvas id="map-canvas"></canvas>
+                    <div id="map-overlay" class="map-overlay">
+                        <div id="hover-info" class="hover-info"></div>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
 

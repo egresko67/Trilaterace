@@ -19,7 +19,7 @@ const db = getDatabase(app);
 // --- STAV APLIKACE ---
 let measurements = [];
 const MAP_SIZE = 400;
-const OFFSET = 200; // Centrováno kolem 0,0 (rozsah -200 až 200)
+const OFFSET = 200; 
 
 // DOM Elementy
 const form = document.getElementById('measurement-form');
@@ -29,29 +29,43 @@ const rInput = document.getElementById('radius');
 const tableBody = document.querySelector('#measurements-table tbody');
 const countSpan = document.getElementById('count');
 const dateSpan = document.getElementById('current-date');
+const timeToResetSpan = document.getElementById('time-to-reset');
 const canvas = document.getElementById('map-canvas');
 const ctx = canvas.getContext('2d');
+const resetViewBtn = document.getElementById('reset-view');
 
 // --- POMOCNÉ FUNKCE ---
 
 function getCurrentDateStr() {
     const now = new Date();
-    return now.toISOString().split('T')[0]; // RRRR-MM-DD
+    return now.toISOString().split('T')[0];
 }
 
 function updateDateDisplay() {
     dateSpan.textContent = getCurrentDateStr();
 }
 
-// Převod Minecraft souřadnic na pixely canvasu
+function updateResetTimer() {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    
+    const diff = tomorrow - now;
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    
+    timeToResetSpan.textContent = `${hours}h ${minutes}m`;
+}
+
 function toCanvas(coord) {
-    // coord: -200 -> 0, 0 -> 200, 200 -> 400
     const scale = canvas.width / MAP_SIZE;
     return (parseFloat(coord) + OFFSET) * scale;
 }
 
 function resizeCanvas() {
-    const size = canvas.parentElement.clientWidth;
+    const container = canvas.parentElement;
+    const size = Math.min(container.clientWidth, container.clientHeight);
     canvas.width = size;
     canvas.height = size;
     render();
@@ -78,28 +92,25 @@ function updateUI() {
     measurements.sort((a, b) => b.timestamp - a.timestamp).forEach(m => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${m.x}</td>
-            <td>${m.z}</td>
-            <td>${m.r}</td>
-            <td>${new Date(m.timestamp).toLocaleTimeString()}</td>
-            <td><button class="btn-delete" data-id="${m.id}">Smazat</button></td>
+            <td><span class="mono">${m.x} / ${m.z}</span></td>
+            <td><span class="mono">${m.r}</span></td>
+            <td><button class="btn-del-small" data-id="${m.id}" title="Smazat">✕</button></td>
         `;
         tableBody.appendChild(tr);
     });
 
-    // Delegace události pro mazání
-    document.querySelectorAll('.btn-delete').forEach(btn => {
+    document.querySelectorAll('.btn-del-small').forEach(btn => {
         btn.onclick = () => deleteMeasurement(btn.dataset.id);
     });
 }
 
 async function deleteMeasurement(id) {
+    if(!confirm("Opravdu smazat toto měření?")) return;
     try {
         const dateStr = getCurrentDateStr();
         await remove(ref(db, `measurements/${dateStr}/${id}`));
     } catch (error) {
-        console.error("Chyba při mazání:", error);
-        alert("Nemáte oprávnění mazat záznamy. Upravte Firebase Rules.");
+        alert("Chyba při mazání: " + error.message);
     }
 }
 
@@ -120,8 +131,7 @@ form.onsubmit = async (e) => {
         await set(newRef, newMeasurement);
         form.reset();
     } catch (error) {
-        console.error("Chyba při odesílání dat:", error);
-        alert("Chyba: " + error.message + "\nZkontrolujte konzoli (F12) nebo Firebase Rules.");
+        alert("Chyba při odesílání: " + error.message);
     }
 };
 
@@ -130,42 +140,58 @@ form.onsubmit = async (e) => {
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Mřížka
+    // Grid
     ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 0.5;
-    const step = canvas.width / 8; // Každých 50 bloků
+    ctx.lineWidth = 1;
+    const step = canvas.width / 8; 
     for (let i = 0; i <= canvas.width; i += step) {
         ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
     }
 
-    // Osy
-    ctx.strokeStyle = '#475569';
+    // Axes
+    ctx.strokeStyle = '#334155';
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(canvas.width / 2, 0); ctx.lineTo(canvas.width / 2, canvas.height); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, canvas.height / 2); ctx.lineTo(canvas.width, canvas.height / 2); ctx.stroke();
 
-    // Měření
+    // Coordinates labels
+    ctx.fillStyle = '#475569';
+    ctx.font = '10px JetBrains Mono';
+    ctx.fillText("-200", 5, canvas.height / 2 - 5);
+    ctx.fillText("200", canvas.width - 25, canvas.height / 2 - 5);
+    ctx.fillText("-200", canvas.width / 2 + 5, 15);
+    ctx.fillText("200", canvas.width / 2 + 5, canvas.height - 5);
+
+    // Circles
     measurements.forEach(m => {
         const cx = toCanvas(m.x);
         const cz = toCanvas(m.z);
         const cr = m.r * (canvas.width / MAP_SIZE);
 
-        // Kružnice (vzdálenost)
+        // Gradient for circles
+        const grad = ctx.createRadialGradient(cx, cz, 0, cx, cz, cr);
+        grad.addColorStop(0, 'rgba(56, 189, 248, 0)');
+        grad.addColorStop(1, 'rgba(56, 189, 248, 0.1)');
+
         ctx.beginPath();
         ctx.arc(cx, cz, cr, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(37, 99, 235, 0.4)';
-        ctx.lineWidth = 2;
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+        ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        // Střed (pozice hráče)
+        // Player dot
         ctx.beginPath();
-        ctx.arc(cx, cz, 3, 0, Math.PI * 2);
+        ctx.arc(cx, cz, 4, 0, Math.PI * 2);
         ctx.fillStyle = '#ef4444';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#ef4444';
         ctx.fill();
+        ctx.shadowBlur = 0;
     });
 
-    // --- TRILATERAČNÍ ODHAD (Zvýraznění průsečíků) ---
     drawIntersections();
 }
 
@@ -181,14 +207,23 @@ function drawIntersections() {
     }
 
     intersections.forEach(p => {
+        const px = toCanvas(p.x);
+        const pz = toCanvas(p.z);
+        
         ctx.beginPath();
-        ctx.arc(toCanvas(p.x), toCanvas(p.z), 4, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(234, 179, 8, 0.6)'; // Žlutá pro průsečíky
+        ctx.arc(px, pz, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#f59e0b';
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#f59e0b';
         ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
     });
 }
 
-// Matematika pro průsečíky dvou kružnic
 function getCircleIntersections(c1, c2) {
     const dx = c2.x - c1.x;
     const dz = c2.z - c1.z;
@@ -197,7 +232,7 @@ function getCircleIntersections(c1, c2) {
     if (d > c1.r + c2.r || d < Math.abs(c1.r - c2.r) || d === 0) return null;
 
     const a = (c1.r * c1.r - c2.r * c2.r + d * d) / (2 * d);
-    const h = Math.sqrt(c1.r * c1.r - a * a);
+    const h = Math.sqrt(Math.max(0, c1.r * c1.r - a * a));
     const x2 = c1.x + a * dx / d;
     const z2 = c1.z + a * dz / d;
 
@@ -213,16 +248,19 @@ function getCircleIntersections(c1, c2) {
 // --- INICIALIZACE ---
 
 window.addEventListener('resize', resizeCanvas);
+resetViewBtn.onclick = resizeCanvas;
+
 updateDateDisplay();
+updateResetTimer();
 resizeCanvas();
 loadData();
 
-// Každou minutu zkontrolovat datum (pro midnight reset bez refreshe)
 setInterval(() => {
+    updateResetTimer();
     const current = dateSpan.textContent;
     const now = getCurrentDateStr();
     if (current !== now) {
         updateDateDisplay();
         loadData();
     }
-}, 60000);
+}, 30000);
