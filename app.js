@@ -158,10 +158,11 @@ function toCoord(val) {
     return parseFloat(val) + OFFSET;
 }
 
-function getConfidenceColor(conf) {
-    if (conf >= 15) return 'var(--success)';
-    if (conf >= 8) return '#fbbf24';
-    if (conf >= 4) return 'var(--accent)';
+function getConfidenceColor(conf, maxConf) {
+    const ratio = conf / maxConf;
+    if (ratio > 0.8) return 'var(--success)';
+    if (ratio > 0.4) return '#fbbf24';
+    if (ratio > 0.1) return 'var(--accent)';
     return 'var(--text-dim)';
 }
 
@@ -306,22 +307,25 @@ function renderSVG() {
     });
 
     layers.intersections.innerHTML = '';
+    const maxConf = intersections.length > 0 ? intersections[0].confidence : 1;
     intersections.forEach((p) => {
         const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         point.setAttribute("cx", toCoord(p.x));
         point.setAttribute("cy", toCoord(p.z));
-        const confColor = getConfidenceColor(p.confidence);
-        const radius = p.isMajor ? Math.min(8 + p.confidence/5, 14) : 6;
+        const confColor = getConfidenceColor(p.confidence, maxConf);
+        const ratio = p.confidence / maxConf;
+        const radius = ratio > 0.5 ? Math.min(10 + p.confidence/20, 16) : 6;
         point.setAttribute("r", radius);
         point.setAttribute("class", "svg-poi-point");
         point.style.fill = confColor;
-        if (p.isMajor) {
-            point.style.filter = `drop-shadow(0 0 ${p.confidence/2}px ${confColor})`;
+        point.style.opacity = ratio > 0.1 ? 1 : 0.3;
+        if (ratio > 0.5) {
+            point.style.filter = `drop-shadow(0 0 ${p.confidence/10}px ${confColor})`;
         }
         const anim = document.createElementNS("http://www.w3.org/2000/svg", "animate");
         anim.setAttribute("attributeName", "r");
         anim.setAttribute("values", `${radius-0.5};${radius+0.5};${radius-0.5}`);
-        anim.setAttribute("dur", p.isMajor ? "1.5s" : "3s");
+        anim.setAttribute("dur", ratio > 0.5 ? "1.5s" : "3s");
         anim.setAttribute("repeatCount", "indefinite");
         point.appendChild(anim);
         point.addEventListener('mouseenter', (e) => showTooltip(e, p));
@@ -343,72 +347,67 @@ function renderSVG() {
 }
 
 function calculateIntersections() {
-    let allIntersections = [];
-    if (measurements.length < 3) {
-        intersections = [];
-        return;
-    }
-    for (let i = 0; i < measurements.length; i++) {
-        for (let j = i + 1; j < measurements.length; j++) {
-            for (let k = j + 1; k < measurements.length; k++) {
-                const pts = getSphereIntersections(measurements[i], measurements[j], measurements[k]);
-                if (pts) {
-                    // Filtrujeme body mimo Minecraft rozsah Y
-                    pts.forEach(p => {
-                        if (p.y >= -64 && p.y <= 320) {
-                            allIntersections.push(p);
-                        }
-                    });
+    let currentMeasurements = [...measurements];
+    let foundTargets = [];
+    const MAX_TARGETS = 10;
+    
+    for (let t = 0; t < MAX_TARGETS; t++) {
+        if (currentMeasurements.length < 3) break;
+        
+        let allIntersections = [];
+        for (let i = 0; i < currentMeasurements.length; i++) {
+            for (let j = i + 1; j < currentMeasurements.length; j++) {
+                for (let k = j + 1; k < currentMeasurements.length; k++) {
+                    const pts = getSphereIntersections(currentMeasurements[i], currentMeasurements[j], currentMeasurements[k]);
+                    if (pts) {
+                        pts.forEach(p => {
+                            if (p.y >= -64 && p.y <= 320) allIntersections.push(p);
+                        });
+                    }
                 }
             }
         }
-    }
-    
-    const clusters = [];
-    const DISTANCE_THRESHOLD = 12; 
-    allIntersections.forEach(p => {
-        let addedToCluster = false;
-        for (let cluster of clusters) {
-            const center = cluster.center;
-            const dist = Math.sqrt(
-                Math.pow(p.x - center.x, 2) + 
-                Math.pow(p.y - center.y, 2) + 
-                Math.pow(p.z - center.z, 2)
-            );
-            if (dist < DISTANCE_THRESHOLD) {
-                cluster.points.push(p);
-                cluster.center = {
-                    x: cluster.points.reduce((sum, pt) => sum + pt.x, 0) / cluster.points.length,
-                    y: cluster.points.reduce((sum, pt) => sum + pt.y, 0) / cluster.points.length,
-                    z: cluster.points.reduce((sum, pt) => sum + pt.z, 0) / cluster.points.length
-                };
-                addedToCluster = true;
-                break;
+        
+        if (allIntersections.length === 0) break;
+        
+        // Clusterování v 3D
+        const clusters = [];
+        allIntersections.forEach(p => {
+            let added = false;
+            for (let c of clusters) {
+                const dist = Math.sqrt(Math.pow(p.x-c.x,2)+Math.pow(p.y-c.y,2)+Math.pow(p.z-c.z,2));
+                if (dist < 10) {
+                    c.pts.push(p);
+                    c.x = c.pts.reduce((s,pt)=>s+pt.x,0)/c.pts.length;
+                    c.y = c.pts.reduce((s,pt)=>s+pt.y,0)/c.pts.length;
+                    c.z = c.pts.reduce((s,pt)=>s+pt.z,0)/c.pts.length;
+                    added = true; break;
+                }
             }
-        }
-        if (!addedToCluster) {
-            clusters.push({ center: { x: p.x, y: p.y, z: p.z }, points: [p] });
-        }
-    });
-
-    // Filtrování šumu: Potřebujeme alespoň minimální shodu
-    const minConfidence = measurements.length > 10 ? 4 : 2;
-
-    intersections = clusters
-        .map(c => ({
-            x: c.center.x,
-            y: c.center.y,
-            z: c.center.z,
-            confidence: c.points.length,
-            isMajor: c.points.length >= 10
-        }))
-        .filter(p => p.confidence >= minConfidence)
-        .sort((a, b) => b.confidence - a.confidence);
-    
-    if (intersections.length > 0) {
-        console.log("Nalezené body zájmu:");
-        console.table(intersections.slice(0, 10));
+            if (!added) clusters.push({x:p.x, y:p.y, z:p.z, pts:[p]});
+        });
+        
+        clusters.sort((a,b) => b.pts.length - a.pts.length);
+        const best = clusters[0];
+        
+        // Pokud má nejlepší cluster příliš malou jistotu, končíme
+        if (best.pts.length < 2) break;
+        
+        foundTargets.push({
+            x: best.x, y: best.y, z: best.z,
+            confidence: best.pts.length,
+            isMajor: true
+        });
+        
+        // Successive Cancellation: Odebereme měření, která souhlasí s tímto cílem
+        currentMeasurements = currentMeasurements.filter(m => {
+            const dist = Math.sqrt(Math.pow(m.x-best.x,2)+Math.pow(m.y-best.y,2)+Math.pow(m.z-best.z,2));
+            return Math.abs(dist - m.r) > 5; // Tolerance 5 bloků
+        });
     }
+    
+    intersections = foundTargets;
+    console.log("Nalezené reálné cíle:", intersections);
 }
 
 function getSphereIntersections(p1, p2, p3) {
@@ -419,7 +418,6 @@ function getSphereIntersections(p1, p2, p3) {
     const r2 = p2.r;
     const r3 = p3.r;
 
-    // Vektorové operace
     const sub = (v1, v2) => ({ x: v1.x - v2.x, y: v1.y - v2.y, z: v1.z - v2.z });
     const dot = (v1, v2) => v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
     const mag = (v) => Math.sqrt(dot(v, v));
@@ -442,7 +440,6 @@ function getSphereIntersections(p1, p2, p3) {
     const ey_vec = sub(p3p1, mul(ex, i));
     const j = mag(ey_vec);
     
-    // Pokud je j příliš malé, body jsou v přímce
     if (j < 0.5) return null;
     const ey = div(ey_vec, j);
     const ez = cross(ex, ey);
@@ -451,17 +448,13 @@ function getSphereIntersections(p1, p2, p3) {
     const y = (r1 * r1 - r3 * r3 + i * i + j * j) / (2 * j) - (i / j) * x;
 
     const zSq = r1 * r1 - x * x - y * y;
-    // Zvětšená tolerance na -50 kvůli zaokrouhlování R u velkých vzdáleností
-    if (zSq < -50) return null;
+    if (zSq < -100) return null;
     const z = Math.sqrt(Math.max(0, zSq));
 
     const base = add(P1, add(mul(ex, x), mul(ey, y)));
     const offset = mul(ez, z);
 
-    return [
-        add(base, offset),
-        sub(base, offset)
-    ];
+    return [add(base, offset), sub(base, offset)];
 }
 
 function showTooltip(e, p) {
