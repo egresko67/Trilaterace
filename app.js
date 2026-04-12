@@ -357,7 +357,7 @@ function calculateIntersections() {
         }
     }
     const clusters = [];
-    const DISTANCE_THRESHOLD = 8; 
+    const DISTANCE_THRESHOLD = 15; 
     allIntersections.forEach(p => {
         let addedToCluster = false;
         for (let cluster of clusters) {
@@ -383,8 +383,10 @@ function calculateIntersections() {
         }
     });
 
-    // Filtrování šumu: Potřebujeme alespoň několik shod pro zobrazení bodu
-    const minConfidence = Math.max(2, Math.floor(measurements.length / 4));
+    console.log(`Nalezeno ${allIntersections.length} surových průsečíků, vytvořeno ${clusters.length} shluků.`);
+
+    // Diagnostika: Snížíme minConfidence na 2
+    const minConfidence = 2;
 
     intersections = clusters
         .map(c => ({
@@ -392,10 +394,12 @@ function calculateIntersections() {
             y: c.center.y,
             z: c.center.z,
             confidence: c.points.length,
-            isMajor: c.points.length >= minConfidence * 2
+            isMajor: c.points.length >= 10
         }))
         .filter(p => p.confidence >= minConfidence)
         .sort((a, b) => b.confidence - a.confidence);
+    
+    console.log("Výsledné body zájmu:", intersections);
 }
 
 function getSphereIntersections(p1, p2, p3) {
