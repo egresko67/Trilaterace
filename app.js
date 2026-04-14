@@ -144,25 +144,47 @@ function resetHighlight() {
 
 // --- DATA ---
 async function loadPoolLocations() {
-    try {
-        const response = await fetch('pool_locations.json');
-        poolLocations = await response.json();
-    } catch (e) {
-        console.error("Failed to load pool locations", e);
-    }
+    // Pool locations are now loaded directly from Firebase's confirmed_eggs
+    poolLocations = []; 
 }
 
 function loadData() {
     const dateStr = getCurrentDateStr();
     dateSpan.textContent = dateStr;
+    
+    // Load measurements for today
     onValue(ref(db, `measurements/${dateStr}`), (snap) => {
         const data = snap.val();
         measurements = data ? Object.entries(data).map(([id, v]) => ({ id, ...v })) : [];
         processAll();
     });
-    onValue(ref(db, `confirmed_eggs/${dateStr}`), (snap) => {
-        const data = snap.val();
-        confirmedEggs = data ? Object.entries(data).map(([id, v]) => ({ id, ...v })) : [];
+
+    // Load ALL confirmed eggs (across all dates) to act as a global pool
+    onValue(ref(db, `confirmed_eggs`), (snap) => {
+        const allData = snap.val();
+        if (allData) {
+            let allEggs = [];
+            Object.entries(allData).forEach(([date, eggs]) => {
+                Object.entries(eggs).forEach(([id, v]) => {
+                    allEggs.push({ id, date, ...v });
+                });
+            });
+            // Remove duplicates by coordinates to keep the map clean
+            const unique = [];
+            const seen = new Set();
+            allEggs.forEach(e => {
+                const key = `${Math.round(e.x)}|${Math.round(e.z)}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    unique.push(e);
+                }
+            });
+            confirmedEggs = unique;
+            poolLocations = unique; // They are the same now
+        } else {
+            confirmedEggs = [];
+            poolLocations = [];
+        }
         processAll();
     });
 }
@@ -310,11 +332,11 @@ function renderSVG() {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         c.setAttribute("cx", toCoord(e.x)); c.setAttribute("cy", toCoord(e.z));
-        c.setAttribute("r", 10);
-        c.style.fill = "#fbbf24"; c.style.stroke = "#fff"; c.style.strokeWidth = "2";
+        c.setAttribute("r", 4); // Zmenšeno z 10
+        c.style.fill = "#fbbf24"; c.style.stroke = "#fff"; c.style.strokeWidth = "1"; // Zmenšen stroke
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        text.setAttribute("x", toCoord(e.x)-5); text.setAttribute("y", toCoord(e.z)+4);
-        text.setAttribute("font-size", "10"); text.textContent = "🥚";
+        text.setAttribute("x", toCoord(e.x)-3); text.setAttribute("y", toCoord(e.z)+3); // Posunuto pro menší ikonu
+        text.setAttribute("font-size", "6"); text.textContent = "🥚"; // Zmenšeno z 10
         g.appendChild(c); g.appendChild(text);
         layers.intersections.appendChild(g);
     });
