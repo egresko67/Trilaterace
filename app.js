@@ -138,10 +138,8 @@ function resetHighlight() {
 function loadData() {
     if (dateSpan) dateSpan.textContent = new Date().toLocaleDateString();
     
-    console.log("Připojuji se k Firebase...");
     onValue(ref(db, `confirmed_eggs`), (snap) => {
         const data = snap.val();
-        console.log("Data přijata z Firebase:", data);
         let eggs = [];
         if (data) {
             Object.entries(data).forEach(([key, val]) => {
@@ -149,7 +147,6 @@ function loadData() {
                     if (val.x !== undefined) {
                         eggs.push({ id: key, ...val });
                     } else {
-                        // Nested by date
                         Object.entries(val).forEach(([subKey, subVal]) => {
                             if (subVal && typeof subVal === 'object') {
                                 eggs.push({ id: subKey, ...subVal, date: key });
@@ -160,7 +157,6 @@ function loadData() {
             });
         }
         
-        console.log("Zpracovaná vejce:", eggs);
         const unique = [];
         const seen = new Set();
         eggs.forEach(e => {
@@ -174,13 +170,10 @@ function loadData() {
         confirmedEggs = unique;
         poolLocations = unique;
         processAll();
-    }, (err) => {
-        console.error("Chyba při čtení z Firebase:", err);
     });
 }
 
 function processAll() {
-    console.log("Překresluji vše...");
     localStorage.setItem('local_measurements', JSON.stringify(measurements));
     calculatePoolMatches();
     updateUI();
@@ -248,7 +241,7 @@ function updateUI() {
         confirmedTableBody.innerHTML = '';
         [...confirmedEggs].sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0)).forEach(e => {
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${e.x},${e.z})">${Math.round(e.x)} / ${Math.round(e.y)} / ${Math.round(e.z)}</span></td><td><button class="btn-del-small" onclick="deleteEgg('${e.id}', '${e.date || ""}')">✕</button></td>`;
+            tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${e.x},${e.z})">${Math.round(e.x)} / ${Math.round(e.y)} / ${Math.round(e.z)}</span></td>`;
             confirmedTableBody.appendChild(tr);
         });
     }
@@ -335,12 +328,6 @@ window.deleteAllMeasurements = () => {
     if(confirm("Smazat všechna lokální měření?")) {
         measurements = [];
         processAll();
-    }
-};
-window.deleteEgg = (id, date) => {
-    if(confirm("Opravdu smazat toto vejce z globální databáze?")) {
-        const path = date ? `confirmed_eggs/${date}/${id}` : `confirmed_eggs/${id}`;
-        remove(ref(db, path));
     }
 };
 window.confirmEgg = async (x, y, z) => { 
