@@ -17,6 +17,7 @@ const db = getDatabase(app);
 let measurements = [];
 let intersections = [];
 let confirmedEggs = [];
+let poolLocations = [];
 const OFFSET = 200; 
 
 const form = document.getElementById('measurement-form');
@@ -32,6 +33,7 @@ const dateSpan = document.getElementById('current-date');
 const mapContainer = document.getElementById('map-container');
 const layers = {
     grid: document.getElementById('svg-grid-layer'),
+    pool: document.getElementById('svg-pool-layer'),
     circles: document.getElementById('svg-circles-layer'),
     intersections: document.getElementById('svg-intersections-layer'),
     players: document.getElementById('svg-players-layer')
@@ -141,6 +143,15 @@ function resetHighlight() {
 }
 
 // --- DATA ---
+async function loadPoolLocations() {
+    try {
+        const response = await fetch('pool_locations.json');
+        poolLocations = await response.json();
+    } catch (e) {
+        console.error("Failed to load pool locations", e);
+    }
+}
+
 function loadData() {
     const dateStr = getCurrentDateStr();
     dateSpan.textContent = dateStr;
@@ -254,6 +265,20 @@ function renderSVG() {
         hLine.setAttribute("class", i === 200 ? "svg-axis-line" : "svg-grid-line");
         layers.grid.appendChild(hLine);
     }
+
+    layers.pool.innerHTML = '';
+    poolLocations.forEach(p => {
+        const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        c.setAttribute("cx", toCoord(p.x)); c.setAttribute("cy", toCoord(p.z));
+        c.setAttribute("r", 2);
+        c.style.fill = "rgba(148, 163, 184, 0.3)";
+        c.style.stroke = "rgba(148, 163, 184, 0.5)";
+        c.style.strokeWidth = "0.5";
+        c.onmouseenter = (e) => showPoolTooltip(e, p);
+        c.onmouseleave = hideTooltip;
+        layers.pool.appendChild(c);
+    });
+
     layers.circles.innerHTML = '';
     measurements.forEach(m => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -275,7 +300,7 @@ function renderSVG() {
     intersections.forEach(p => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         c.setAttribute("cx", toCoord(p.x)); c.setAttribute("cy", toCoord(p.z));
-        c.setAttribute("r", 6); c.setAttribute("class", "svg-poi-point");
+        c.setAttribute("r", 3); c.setAttribute("class", "svg-poi-point");
         c.style.fill = getConfidenceColor(p.confidence);
         c.onmouseenter = (e) => showTooltip(e, p);
         c.onmouseleave = hideTooltip;
@@ -311,7 +336,32 @@ function getSphereIntersections(p1, p2, p3) {
     const zSq=r1*r1-x*x-y*y; if(zSq<-100) return null; const z=Math.sqrt(Math.max(0,zSq)); const base=add(P1,add(mul(ex,x),mul(ey,y))); return [add(base,mul(ez,z)),sub(base,mul(ez,z))];
 }
 
-function showTooltip(e, p) { hoverInfo.style.display = 'block'; hoverInfo.innerHTML = `<strong>Odhad</strong><br>X: ${p.x}<br>Y: ${p.y}<br>Z: ${p.z}<br><small>Kvalita: ${p.quality}%</small>`; moveTooltip(e); }
+function showTooltip(e, p) {
+    const nearestPool = poolLocations.length > 0 ? poolLocations.reduce((prev, curr) => {
+        const distPrev = Math.sqrt(Math.pow(p.x-prev.x,2)+Math.pow(p.z-prev.z,2));
+        const distCurr = Math.sqrt(Math.pow(p.x-curr.x,2)+Math.pow(p.z-curr.z,2));
+        return (distCurr < distPrev) ? curr : prev;
+    }, poolLocations[0]) : null;
+
+    let poolMatch = "";
+    if (nearestPool) {
+        const dist = Math.sqrt(Math.pow(p.x-nearestPool.x,2)+Math.pow(p.z-nearestPool.z,2));
+        if (dist < 10) {
+            poolMatch = `<br><span style="color:var(--success)">Poblíž známé lokace: ${nearestPool.x} / ${nearestPool.y} / ${nearestPool.z}</span>`;
+        }
+    }
+
+    hoverInfo.style.display = 'block';
+    hoverInfo.innerHTML = `<strong>Průsečík</strong><br>X: ${p.x}<br>Y: ${p.y}<br>Z: ${p.z}<br><small>Kvalita: ${p.quality}%</small>${poolMatch}`;
+    moveTooltip(e);
+}
+
+function showPoolTooltip(e, p) {
+    hoverInfo.style.display = 'block';
+    hoverInfo.innerHTML = `<strong>Známá lokace</strong><br>X: ${p.x}<br>Y: ${p.y}<br>Z: ${p.z}`;
+    moveTooltip(e);
+}
+
 function moveTooltip(e) {
     const rect = hoverInfo.getBoundingClientRect();
     const padding = 15;
@@ -328,5 +378,7 @@ window.focusOnPoint = (x, z) => { viewState.zoom = 2; viewState.x = 200 - (x+OFF
 
 form.onsubmit = async (e) => { e.preventDefault(); const dateStr = getCurrentDateStr(); await push(ref(db, `measurements/${dateStr}`), { x: parseFloat(xInput.value), y: parseFloat(yInput.value), z: parseFloat(zInput.value), r: parseFloat(rInput.value), timestamp: Date.now() }); form.reset(); };
 
-loadData();
-setInterval(loadData, 60000);
+loadPoolLocations().then(() => {
+    loadData();
+    setInterval(loadData, 60000);
+});
