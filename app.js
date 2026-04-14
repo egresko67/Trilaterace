@@ -14,10 +14,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-let measurements = []; // LOCAL ONLY
-let intersections = []; // Matches from pool
-let confirmedEggs = []; // Global pool
-let poolLocations = []; // Global pool (unique)
+let measurements = JSON.parse(localStorage.getItem('local_measurements') || '[]'); 
+let intersections = []; 
+let confirmedEggs = []; 
+let poolLocations = []; 
 const OFFSET = 200; 
 
 const form = document.getElementById('measurement-form');
@@ -47,7 +47,6 @@ const resetButton = document.getElementById('reset-view');
 
 let viewState = { x: 0, y: 0, zoom: 1, isDragging: false, startX: 0, startY: 0 };
 
-// --- ZOOM & PAN ---
 mapSvg.addEventListener('wheel', (e) => {
     e.preventDefault();
     const rect = mapSvg.getBoundingClientRect();
@@ -111,14 +110,13 @@ toggleCircles.addEventListener('change', () => {
     layers.circles.style.display = toggleCircles.checked ? 'block' : 'none';
 });
 
-// --- POMOCNÉ FUNKCE ---
 function toCoord(val) { return parseFloat(val) + OFFSET; }
 function getCurrentDateStr() { return new Date().toISOString().split('T')[0]; }
 
 function getConfidenceColor(conf) {
-    if (conf >= 3) return '#22c55e'; // Vysoká shoda (3+ měření)
-    if (conf >= 2) return '#fbbf24'; // Střední shoda (2 měření)
-    if (conf >= 1) return '#f97316'; // Nízká shoda (1 měření)
+    if (conf >= 3) return '#22c55e';
+    if (conf >= 2) return '#fbbf24';
+    if (conf >= 1) return '#f97316';
     return '#94a3b8';
 }
 
@@ -140,12 +138,10 @@ function resetHighlight() {
     });
 }
 
-// --- DATA ---
 function loadData() {
     const dateStr = getCurrentDateStr();
     dateSpan.textContent = dateStr;
     
-    // Load ALL confirmed eggs (across all dates) to act as a global pool
     onValue(ref(db, `confirmed_eggs`), (snap) => {
         const allData = snap.val();
         if (allData) {
@@ -175,6 +171,7 @@ function loadData() {
 }
 
 function processAll() {
+    localStorage.setItem('local_measurements', JSON.stringify(measurements));
     calculatePoolMatches();
     updateUI();
     renderSVG();
@@ -194,7 +191,7 @@ function calculatePoolMatches() {
         measurements.forEach(m => {
             const dist = Math.sqrt(Math.pow(egg.x - m.x, 2) + Math.pow(egg.y - m.y, 2) + Math.pow(egg.z - m.z, 2));
             const error = Math.abs(dist - m.r);
-            if (error < 6) { // Tolerance 6 bloků
+            if (error < 6) {
                 support++;
                 totalError += error;
             }
@@ -210,7 +207,7 @@ function calculatePoolMatches() {
     });
 
     candidates.sort((a, b) => (b.confidence * 1000 + b.quality) - (a.confidence * 1000 + a.quality));
-    intersections = candidates.slice(0, 20); // Top 20 shod
+    intersections = candidates.slice(0, 20);
 }
 
 function updateUI() {
@@ -231,7 +228,7 @@ function updateUI() {
         targetsTableBody.appendChild(tr);
     });
     confirmedTableBody.innerHTML = '';
-    confirmedEggs.forEach(e => {
+    [...confirmedEggs].sort((a,b) => b.timestamp - a.timestamp).forEach(e => {
         const tr = document.createElement('tr');
         tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${e.x},${e.z})">${Math.round(e.x)} / ${Math.round(e.y)} / ${Math.round(e.z)}</span></td><td><button class="btn-del-small" onclick="deleteEgg('${e.id}', '${e.date}')">✕</button></td>`;
         confirmedTableBody.appendChild(tr);
@@ -257,8 +254,9 @@ function renderSVG() {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         c.setAttribute("cx", toCoord(p.x)); c.setAttribute("cy", toCoord(p.z));
         c.setAttribute("r", 1.5);
-        c.style.fill = "rgba(148, 163, 184, 0.2)";
+        c.style.fill = "rgba(148, 163, 184, 0.4)";
         c.style.stroke = "none";
+        c.style.pointerEvents = "all";
         c.onmouseenter = (e) => showPoolTooltip(e, p);
         c.onmouseleave = hideTooltip;
         layers.pool.appendChild(c);
@@ -273,6 +271,7 @@ function renderSVG() {
         c.style.fill = "none"; c.style.stroke = "var(--primary)"; c.style.opacity = "0.15";
         layers.circles.appendChild(c);
     });
+
     layers.players.innerHTML = '';
     measurements.forEach(m => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -281,6 +280,7 @@ function renderSVG() {
         c.style.fill = "var(--danger)"; c.style.stroke = "white"; c.style.strokeWidth = "0.5";
         layers.players.appendChild(c);
     });
+
     layers.intersections.innerHTML = '';
     intersections.forEach(p => {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -304,13 +304,12 @@ function renderSVG() {
     });
 }
 
-// --- GLOBÁLNÍ FUNKCE ---
 window.deleteMeasurement = (id) => { 
     measurements = measurements.filter(m => m.id !== id);
     processAll();
 };
 window.deleteAllMeasurements = () => { 
-    if(confirm("Smazat lokální měření?")) {
+    if(confirm("Smazat všechna lokální měření?")) {
         measurements = [];
         processAll();
     }
@@ -378,3 +377,4 @@ form.onsubmit = (e) => {
 };
 
 loadData();
+processAll();
