@@ -14,6 +14,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+// Local persistence for measurements
 let measurements = JSON.parse(localStorage.getItem('local_measurements') || '[]'); 
 let intersections = []; 
 let confirmedEggs = []; 
@@ -30,7 +31,6 @@ const targetsTableBody = document.querySelector('#targets-table tbody');
 const confirmedTableBody = document.querySelector('#confirmed-table tbody');
 const countSpan = document.getElementById('count');
 const dateSpan = document.getElementById('current-date');
-const mapContainer = document.getElementById('map-container');
 const layers = {
     grid: document.getElementById('svg-grid-layer'),
     pool: document.getElementById('svg-pool-layer'),
@@ -47,6 +47,7 @@ const resetButton = document.getElementById('reset-view');
 
 let viewState = { x: 0, y: 0, zoom: 1, isDragging: false, startX: 0, startY: 0 };
 
+// ZOOM & PAN
 mapSvg.addEventListener('wheel', (e) => {
     e.preventDefault();
     const rect = mapSvg.getBoundingClientRect();
@@ -110,9 +111,8 @@ toggleCircles.addEventListener('change', () => {
     layers.circles.style.display = toggleCircles.checked ? 'block' : 'none';
 });
 
+// UTILS
 function toCoord(val) { return parseFloat(val) + OFFSET; }
-function getCurrentDateStr() { return new Date().toISOString().split('T')[0]; }
-
 function getConfidenceColor(conf) {
     if (conf >= 3) return '#22c55e';
     if (conf >= 2) return '#fbbf24';
@@ -138,34 +138,42 @@ function resetHighlight() {
     });
 }
 
+// DATA LOADING
 function loadData() {
-    const dateStr = getCurrentDateStr();
-    dateSpan.textContent = dateStr;
+    dateSpan.textContent = new Date().toLocaleDateString();
     
+    // Flat structure: confirmed_eggs/$id = {x, y, z, timestamp}
     onValue(ref(db, `confirmed_eggs`), (snap) => {
-        const allData = snap.val();
-        if (allData) {
-            let allEggs = [];
-            Object.entries(allData).forEach(([date, eggs]) => {
-                Object.entries(eggs).forEach(([id, v]) => {
-                    allEggs.push({ id, date, ...v });
-                });
-            });
-            const unique = [];
-            const seen = new Set();
-            allEggs.forEach(e => {
-                const key = `${Math.round(e.x)}|${Math.round(e.z)}`;
-                if (!seen.has(key)) {
-                    seen.add(key);
-                    unique.push(e);
+        const data = snap.val();
+        let eggs = [];
+        if (data) {
+            // Support both flat and nested (by date) structures during transition
+            Object.entries(data).forEach(([key, val]) => {
+                if (val.x !== undefined) {
+                    // It's flat
+                    eggs.push({ id: key, ...val });
+                } else {
+                    // It's nested by date
+                    Object.entries(val).forEach(([subKey, subVal]) => {
+                        eggs.push({ id: subKey, ...subVal, date: key });
+                    });
                 }
             });
-            confirmedEggs = unique;
-            poolLocations = unique;
-        } else {
-            confirmedEggs = [];
-            poolLocations = [];
         }
+        
+        // Ensure uniqueness by coordinates
+        const unique = [];
+        const seen = new Set();
+        eggs.forEach(e => {
+            const coordKey = `${Math.round(e.x)}|${Math.round(e.z)}`;
+            if (!seen.has(coordKey)) {
+                seen.add(coordKey);
+                unique.push(e);
+            }
+        });
+        
+        confirmedEggs = unique;
+        poolLocations = unique;
         processAll();
     });
 }
@@ -212,6 +220,8 @@ function calculatePoolMatches() {
 
 function updateUI() {
     countSpan.textContent = measurements.length;
+    
+    // Measurements Table
     tableBody.innerHTML = '';
     [...measurements].sort((a,b)=>b.timestamp-a.timestamp).forEach(m => {
         const tr = document.createElement('tr');
@@ -220,6 +230,8 @@ function updateUI() {
         tr.innerHTML = `<td><span class="mono">${Math.round(m.x)} / ${Math.round(m.y)} / ${Math.round(m.z)}</span></td><td>${m.r}</td><td><button class="btn-del-small" onclick="deleteMeasurement('${m.id}')">✕</button></td>`;
         tableBody.appendChild(tr);
     });
+
+    // Targets (Matches) Table
     targetsTableBody.innerHTML = '';
     intersections.forEach(p => {
         const tr = document.createElement('tr');
@@ -227,15 +239,20 @@ function updateUI() {
         tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${p.x},${p.z})">${p.x} / ${p.y} / ${p.z}</span><div style="font-size: 0.6rem; color: #94a3b8">Shoda: ${p.quality}%</div></td><td><span class="badge" style="color:${color}">${p.confidence}x</span></td><td><button class="btn-primary" style="padding:4px 8px; font-size:0.7rem" onclick="confirmEgg(${p.x},${p.y},${p.z})">Ok</button></td>`;
         targetsTableBody.appendChild(tr);
     });
+
+    // Confirmed Eggs Table
     confirmedTableBody.innerHTML = '';
-    [...confirmedEggs].sort((a,b) => b.timestamp - a.timestamp).forEach(e => {
+    [...confirmedEggs].sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0)).forEach(e => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${e.x},${e.z})">${Math.round(e.x)} / ${Math.round(e.y)} / ${Math.round(e.z)}</span></td><td><button class="btn-del-small" onclick="deleteEgg('${e.id}', '${e.date}')">✕</button></td>`;
+        tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${e.x},${e.z})">${Math.round(e.x)} / ${Math.round(e.y)} / ${Math.round(e.z)}</span></td><td><button class="btn-del-small" onclick="deleteEgg('${e.id}', '${e.date || ""}')">✕</button></td>`;
         confirmedTableBody.appendChild(tr);
     });
 }
 
 function renderSVG() {
+    if (!layers.grid) return;
+
+    // Grid
     layers.grid.innerHTML = '';
     const step = 50;
     for (let i = 0; i <= 400; i += step) {
@@ -243,12 +260,14 @@ function renderSVG() {
         vLine.setAttribute("x1", i); vLine.setAttribute("y1", 0); vLine.setAttribute("x2", i); vLine.setAttribute("y2", 400);
         vLine.setAttribute("class", i === 200 ? "svg-axis-line" : "svg-grid-line");
         layers.grid.appendChild(vLine);
+        
         const hLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
         hLine.setAttribute("x1", 0); hLine.setAttribute("y1", i); hLine.setAttribute("x2", 400); hLine.setAttribute("y2", i);
         hLine.setAttribute("class", i === 200 ? "svg-axis-line" : "svg-grid-line");
         layers.grid.appendChild(hLine);
     }
 
+    // Pool dots
     layers.pool.innerHTML = '';
     poolLocations.forEach(p => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -262,6 +281,7 @@ function renderSVG() {
         layers.pool.appendChild(c);
     });
 
+    // Measurement Circles
     layers.circles.innerHTML = '';
     measurements.forEach(m => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -272,6 +292,7 @@ function renderSVG() {
         layers.circles.appendChild(c);
     });
 
+    // Player Points
     layers.players.innerHTML = '';
     measurements.forEach(m => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -281,6 +302,7 @@ function renderSVG() {
         layers.players.appendChild(c);
     });
 
+    // Matches (Eggs)
     layers.intersections.innerHTML = '';
     intersections.forEach(p => {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -304,6 +326,7 @@ function renderSVG() {
     });
 }
 
+// ACTIONS
 window.deleteMeasurement = (id) => { 
     measurements = measurements.filter(m => m.id !== id);
     processAll();
@@ -316,12 +339,17 @@ window.deleteAllMeasurements = () => {
 };
 window.deleteEgg = (id, date) => {
     if(confirm("Opravdu smazat toto vejce z globální databáze?")) {
-        remove(ref(db, `confirmed_eggs/${date}/${id}`));
+        const path = date ? `confirmed_eggs/${date}/${id}` : `confirmed_eggs/${id}`;
+        remove(ref(db, path));
     }
 };
 window.confirmEgg = async (x, y, z) => { 
-    const dateStr = getCurrentDateStr(); 
-    await push(ref(db, `confirmed_eggs/${dateStr}`), { x: Math.round(x), y: Math.round(y), z: Math.round(z), timestamp: Date.now() }); 
+    await push(ref(db, `confirmed_eggs`), { 
+        x: Math.round(x), 
+        y: Math.round(y), 
+        z: Math.round(z), 
+        timestamp: Date.now() 
+    }); 
 };
 window.addManualEgg = async () => { 
     const x = document.getElementById('conf-x').value; 
@@ -335,18 +363,17 @@ window.addManualEgg = async () => {
     } 
 };
 
+// TOOLTIPS
 function showTooltip(e, p) {
     hoverInfo.style.display = 'block';
     hoverInfo.innerHTML = `<strong>Potenciální shoda</strong><br>X: ${p.x}<br>Y: ${p.y}<br>Z: ${p.z}<br><small>Shoda: ${p.quality}%</small><br><small>Podpořeno ${p.confidence} měřeními</small>`;
     moveTooltip(e);
 }
-
 function showPoolTooltip(e, p) {
     hoverInfo.style.display = 'block';
     hoverInfo.innerHTML = `<strong>Možná lokace (Pool)</strong><br>X: ${p.x}<br>Y: ${p.y}<br>Z: ${p.z}`;
     moveTooltip(e);
 }
-
 function moveTooltip(e) {
     const rect = hoverInfo.getBoundingClientRect();
     const padding = 15;
@@ -359,7 +386,12 @@ function moveTooltip(e) {
     hoverInfo.style.top = `${y}px`;
 }
 function hideTooltip() { hoverInfo.style.display = 'none'; }
-window.focusOnPoint = (x, z) => { viewState.zoom = 2; viewState.x = 200 - (x+OFFSET)*2; viewState.y = 200 - (z+OFFSET)*2; updateViewTransformation(); };
+window.focusOnPoint = (x, z) => { 
+    viewState.zoom = 2; 
+    viewState.x = 200 - (x+OFFSET)*2; 
+    viewState.y = 200 - (z+OFFSET)*2; 
+    updateViewTransformation(); 
+};
 
 form.onsubmit = (e) => { 
     e.preventDefault(); 
