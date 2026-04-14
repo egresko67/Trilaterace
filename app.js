@@ -14,7 +14,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-// Local persistence for measurements
 let measurements = JSON.parse(localStorage.getItem('local_measurements') || '[]'); 
 let intersections = []; 
 let confirmedEggs = []; 
@@ -47,7 +46,6 @@ const resetButton = document.getElementById('reset-view');
 
 let viewState = { x: 0, y: 0, zoom: 1, isDragging: false, startX: 0, startY: 0 };
 
-// ZOOM & PAN
 mapSvg.addEventListener('wheel', (e) => {
     e.preventDefault();
     const rect = mapSvg.getBoundingClientRect();
@@ -111,7 +109,6 @@ toggleCircles.addEventListener('change', () => {
     layers.circles.style.display = toggleCircles.checked ? 'block' : 'none';
 });
 
-// UTILS
 function toCoord(val) { return parseFloat(val) + OFFSET; }
 function getConfidenceColor(conf) {
     if (conf >= 3) return '#22c55e';
@@ -138,30 +135,32 @@ function resetHighlight() {
     });
 }
 
-// DATA LOADING
 function loadData() {
-    dateSpan.textContent = new Date().toLocaleDateString();
+    if (dateSpan) dateSpan.textContent = new Date().toLocaleDateString();
     
-    // Flat structure: confirmed_eggs/$id = {x, y, z, timestamp}
+    console.log("Připojuji se k Firebase...");
     onValue(ref(db, `confirmed_eggs`), (snap) => {
         const data = snap.val();
+        console.log("Data přijata z Firebase:", data);
         let eggs = [];
         if (data) {
-            // Support both flat and nested (by date) structures during transition
             Object.entries(data).forEach(([key, val]) => {
-                if (val.x !== undefined) {
-                    // It's flat
-                    eggs.push({ id: key, ...val });
-                } else {
-                    // It's nested by date
-                    Object.entries(val).forEach(([subKey, subVal]) => {
-                        eggs.push({ id: subKey, ...subVal, date: key });
-                    });
+                if (val && typeof val === 'object') {
+                    if (val.x !== undefined) {
+                        eggs.push({ id: key, ...val });
+                    } else {
+                        // Nested by date
+                        Object.entries(val).forEach(([subKey, subVal]) => {
+                            if (subVal && typeof subVal === 'object') {
+                                eggs.push({ id: subKey, ...subVal, date: key });
+                            }
+                        });
+                    }
                 }
             });
         }
         
-        // Ensure uniqueness by coordinates
+        console.log("Zpracovaná vejce:", eggs);
         const unique = [];
         const seen = new Set();
         eggs.forEach(e => {
@@ -175,10 +174,13 @@ function loadData() {
         confirmedEggs = unique;
         poolLocations = unique;
         processAll();
+    }, (err) => {
+        console.error("Chyba při čtení z Firebase:", err);
     });
 }
 
 function processAll() {
+    console.log("Překresluji vše...");
     localStorage.setItem('local_measurements', JSON.stringify(measurements));
     calculatePoolMatches();
     updateUI();
@@ -219,40 +221,42 @@ function calculatePoolMatches() {
 }
 
 function updateUI() {
-    countSpan.textContent = measurements.length;
+    if (countSpan) countSpan.textContent = measurements.length;
     
-    // Measurements Table
-    tableBody.innerHTML = '';
-    [...measurements].sort((a,b)=>b.timestamp-a.timestamp).forEach(m => {
-        const tr = document.createElement('tr');
-        tr.onmouseenter = () => highlightMeasurement(m.id);
-        tr.onmouseleave = () => resetHighlight();
-        tr.innerHTML = `<td><span class="mono">${Math.round(m.x)} / ${Math.round(m.y)} / ${Math.round(m.z)}</span></td><td>${m.r}</td><td><button class="btn-del-small" onclick="deleteMeasurement('${m.id}')">✕</button></td>`;
-        tableBody.appendChild(tr);
-    });
+    if (tableBody) {
+        tableBody.innerHTML = '';
+        [...measurements].sort((a,b)=>b.timestamp-a.timestamp).forEach(m => {
+            const tr = document.createElement('tr');
+            tr.onmouseenter = () => highlightMeasurement(m.id);
+            tr.onmouseleave = () => resetHighlight();
+            tr.innerHTML = `<td><span class="mono">${Math.round(m.x)} / ${Math.round(m.y)} / ${Math.round(m.z)}</span></td><td>${m.r}</td><td><button class="btn-del-small" onclick="deleteMeasurement('${m.id}')">✕</button></td>`;
+            tableBody.appendChild(tr);
+        });
+    }
 
-    // Targets (Matches) Table
-    targetsTableBody.innerHTML = '';
-    intersections.forEach(p => {
-        const tr = document.createElement('tr');
-        const color = getConfidenceColor(p.confidence);
-        tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${p.x},${p.z})">${p.x} / ${p.y} / ${p.z}</span><div style="font-size: 0.6rem; color: #94a3b8">Shoda: ${p.quality}%</div></td><td><span class="badge" style="color:${color}">${p.confidence}x</span></td><td><button class="btn-primary" style="padding:4px 8px; font-size:0.7rem" onclick="confirmEgg(${p.x},${p.y},${p.z})">Ok</button></td>`;
-        targetsTableBody.appendChild(tr);
-    });
+    if (targetsTableBody) {
+        targetsTableBody.innerHTML = '';
+        intersections.forEach(p => {
+            const tr = document.createElement('tr');
+            const color = getConfidenceColor(p.confidence);
+            tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${p.x},${p.z})">${p.x} / ${p.y} / ${p.z}</span><div style="font-size: 0.6rem; color: #94a3b8">Shoda: ${p.quality}%</div></td><td><span class="badge" style="color:${color}">${p.confidence}x</span></td><td><button class="btn-primary" style="padding:4px 8px; font-size:0.7rem" onclick="confirmEgg(${p.x},${p.y},${p.z})">Ok</button></td>`;
+            targetsTableBody.appendChild(tr);
+        });
+    }
 
-    // Confirmed Eggs Table
-    confirmedTableBody.innerHTML = '';
-    [...confirmedEggs].sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0)).forEach(e => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${e.x},${e.z})">${Math.round(e.x)} / ${Math.round(e.y)} / ${Math.round(e.z)}</span></td><td><button class="btn-del-small" onclick="deleteEgg('${e.id}', '${e.date || ""}')">✕</button></td>`;
-        confirmedTableBody.appendChild(tr);
-    });
+    if (confirmedTableBody) {
+        confirmedTableBody.innerHTML = '';
+        [...confirmedEggs].sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0)).forEach(e => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${e.x},${e.z})">${Math.round(e.x)} / ${Math.round(e.y)} / ${Math.round(e.z)}</span></td><td><button class="btn-del-small" onclick="deleteEgg('${e.id}', '${e.date || ""}')">✕</button></td>`;
+            confirmedTableBody.appendChild(tr);
+        });
+    }
 }
 
 function renderSVG() {
     if (!layers.grid) return;
 
-    // Grid
     layers.grid.innerHTML = '';
     const step = 50;
     for (let i = 0; i <= 400; i += step) {
@@ -267,21 +271,20 @@ function renderSVG() {
         layers.grid.appendChild(hLine);
     }
 
-    // Pool dots
     layers.pool.innerHTML = '';
     poolLocations.forEach(p => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         c.setAttribute("cx", toCoord(p.x)); c.setAttribute("cy", toCoord(p.z));
-        c.setAttribute("r", 1.5);
-        c.style.fill = "rgba(148, 163, 184, 0.4)";
-        c.style.stroke = "none";
+        c.setAttribute("r", 2);
+        c.style.fill = "rgba(148, 163, 184, 0.6)";
+        c.style.stroke = "white";
+        c.style.strokeWidth = "0.5";
         c.style.pointerEvents = "all";
         c.onmouseenter = (e) => showPoolTooltip(e, p);
         c.onmouseleave = hideTooltip;
         layers.pool.appendChild(c);
     });
 
-    // Measurement Circles
     layers.circles.innerHTML = '';
     measurements.forEach(m => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -292,23 +295,21 @@ function renderSVG() {
         layers.circles.appendChild(c);
     });
 
-    // Player Points
     layers.players.innerHTML = '';
     measurements.forEach(m => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         c.setAttribute("cx", toCoord(m.x)); c.setAttribute("cy", toCoord(m.z));
-        c.setAttribute("r", 1.5); c.setAttribute("class", "svg-player-point");
+        c.setAttribute("r", 2); c.setAttribute("class", "svg-player-point");
         c.style.fill = "var(--danger)"; c.style.stroke = "white"; c.style.strokeWidth = "0.5";
         layers.players.appendChild(c);
     });
 
-    // Matches (Eggs)
     layers.intersections.innerHTML = '';
     intersections.forEach(p => {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         c.setAttribute("cx", toCoord(p.x)); c.setAttribute("cy", toCoord(p.z));
-        c.setAttribute("r", 4 + p.confidence);
+        c.setAttribute("r", 5 + p.confidence);
         c.style.fill = getConfidenceColor(p.confidence);
         c.style.stroke = "white";
         c.style.strokeWidth = "1";
@@ -326,7 +327,6 @@ function renderSVG() {
     });
 }
 
-// ACTIONS
 window.deleteMeasurement = (id) => { 
     measurements = measurements.filter(m => m.id !== id);
     processAll();
@@ -363,7 +363,6 @@ window.addManualEgg = async () => {
     } 
 };
 
-// TOOLTIPS
 function showTooltip(e, p) {
     hoverInfo.style.display = 'block';
     hoverInfo.innerHTML = `<strong>Potenciální shoda</strong><br>X: ${p.x}<br>Y: ${p.y}<br>Z: ${p.z}<br><small>Shoda: ${p.quality}%</small><br><small>Podpořeno ${p.confidence} měřeními</small>`;
