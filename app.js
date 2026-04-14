@@ -14,10 +14,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-let measurements = [];
-let intersections = [];
-let confirmedEggs = [];
-let poolLocations = [];
+let measurements = []; // LOCAL ONLY
+let intersections = []; // Matches from pool
+let confirmedEggs = []; // Global pool
+let poolLocations = []; // Global pool (unique)
 const OFFSET = 200; 
 
 const form = document.getElementById('measurement-form');
@@ -55,7 +55,6 @@ mapSvg.addEventListener('wheel', (e) => {
     const mouseY = (e.clientY - rect.top) / rect.height * 400;
     const delta = -e.deltaY;
     const factor = Math.pow(1.1, delta / 100);
-    // NÁVRAT: Zoom nesmí jít pod 1.0
     const newZoom = Math.min(Math.max(viewState.zoom * factor, 1.0), 15);
     const actualFactor = newZoom / viewState.zoom;
     viewState.x = mouseX - (mouseX - viewState.x) * actualFactor;
@@ -97,7 +96,6 @@ window.addEventListener('mousemove', (e) => {
 window.addEventListener('mouseup', () => { viewState.isDragging = false; });
 
 function updateViewTransformation() {
-    // NÁVRAT: Omezení panování na hranice 400x400
     const minPan = 400 * (1 - viewState.zoom);
     viewState.x = Math.min(Math.max(viewState.x, minPan), 0);
     viewState.y = Math.min(Math.max(viewState.y, minPan), 0);
@@ -118,9 +116,9 @@ function toCoord(val) { return parseFloat(val) + OFFSET; }
 function getCurrentDateStr() { return new Date().toISOString().split('T')[0]; }
 
 function getConfidenceColor(conf) {
-    if (conf >= 4) return '#22c55e';
-    if (conf >= 3) return '#fbbf24';
-    if (conf >= 2) return '#f97316';
+    if (conf >= 3) return '#22c55e'; // Vysoká shoda (3+ měření)
+    if (conf >= 2) return '#fbbf24'; // Střední shoda (2 měření)
+    if (conf >= 1) return '#f97316'; // Nízká shoda (1 měření)
     return '#94a3b8';
 }
 
@@ -143,22 +141,10 @@ function resetHighlight() {
 }
 
 // --- DATA ---
-async function loadPoolLocations() {
-    // Pool locations are now loaded directly from Firebase's confirmed_eggs
-    poolLocations = []; 
-}
-
 function loadData() {
     const dateStr = getCurrentDateStr();
     dateSpan.textContent = dateStr;
     
-    // Load measurements for today
-    onValue(ref(db, `measurements/${dateStr}`), (snap) => {
-        const data = snap.val();
-        measurements = data ? Object.entries(data).map(([id, v]) => ({ id, ...v })) : [];
-        processAll();
-    });
-
     // Load ALL confirmed eggs (across all dates) to act as a global pool
     onValue(ref(db, `confirmed_eggs`), (snap) => {
         const allData = snap.val();
@@ -169,7 +155,6 @@ function loadData() {
                     allEggs.push({ id, date, ...v });
                 });
             });
-            // Remove duplicates by coordinates to keep the map clean
             const unique = [];
             const seen = new Set();
             allEggs.forEach(e => {
@@ -180,7 +165,7 @@ function loadData() {
                 }
             });
             confirmedEggs = unique;
-            poolLocations = unique; // They are the same now
+            poolLocations = unique;
         } else {
             confirmedEggs = [];
             poolLocations = [];
@@ -190,68 +175,48 @@ function loadData() {
 }
 
 function processAll() {
-    calculateIntersections();
+    calculatePoolMatches();
     updateUI();
     renderSVG();
 }
 
-function calculateIntersections() {
-    let currentMeasurements = [...measurements];
-    let foundTargets = [];
-    confirmedEggs.forEach(egg => {
-        currentMeasurements = currentMeasurements.filter(m => {
-            const d = Math.sqrt(Math.pow(egg.x-m.x,2)+Math.pow(egg.y-m.y,2)+Math.pow(egg.z-m.z,2));
-            return Math.abs(d - m.r) > 5;
-        });
-    });
-    const MAX_TARGETS = 10 - confirmedEggs.length;
-    for (let t = 0; t < MAX_TARGETS; t++) {
-        if (currentMeasurements.length < 3) break;
-        let candidates = [];
-        for (let i = 0; i < currentMeasurements.length; i++) {
-            for (let j = i + 1; j < currentMeasurements.length; j++) {
-                for (let k = j + 1; k < currentMeasurements.length; k++) {
-                    const pts = getSphereIntersections(currentMeasurements[i], currentMeasurements[j], currentMeasurements[k]);
-                    if (pts) {
-                        pts.forEach(p => {
-                            if (p.x >= -200 && p.x <= 200 && p.z >= -200 && p.z <= 200 && p.y >= -64 && p.y <= 320) {
-                                let matchingPoints = [];
-                                currentMeasurements.forEach(m => {
-                                    const d = Math.sqrt(Math.pow(p.x-m.x,2)+Math.pow(p.y-m.y,2)+Math.pow(p.z-m.z,2));
-                                    if (Math.abs(d - m.r) < 5) matchingPoints.push(m);
-                                });
-                                if (matchingPoints.length >= 2) {
-                                    let totalDist = 0; let count = 0;
-                                    for(let a=0; a<matchingPoints.length; a++) {
-                                        for(let b=a+1; b<matchingPoints.length; b++) {
-                                            totalDist += Math.sqrt(Math.pow(matchingPoints[a].x-matchingPoints[b].x,2) + Math.pow(matchingPoints[a].z-matchingPoints[b].z,2));
-                                            count++;
-                                        }
-                                    }
-                                    candidates.push({...p, support: matchingPoints.length, quality: count > 0 ? (totalDist / count) : 0});
-                                }
-                            }
-                        });
-                    }
-                }
-            }
-        }
-        if (candidates.length === 0) break;
-        candidates.sort((a, b) => (b.support * 1000 + b.quality) - (a.support * 1000 + a.quality));
-        const best = candidates[0];
-        foundTargets.push({ x: Math.round(best.x), y: Math.round(best.y), z: Math.round(best.z), confidence: best.support, quality: Math.min(100, Math.round(best.quality / 2)) });
-        currentMeasurements = currentMeasurements.filter(m => {
-            const d = Math.sqrt(Math.pow(best.x-m.x,2)+Math.pow(best.y-m.y,2)+Math.pow(best.z-m.z,2));
-            return Math.abs(d - m.r) > 5;
-        });
+function calculatePoolMatches() {
+    if (measurements.length === 0) {
+        intersections = [];
+        return;
     }
-    intersections = foundTargets;
+
+    let candidates = [];
+    poolLocations.forEach(egg => {
+        let support = 0;
+        let totalError = 0;
+        
+        measurements.forEach(m => {
+            const dist = Math.sqrt(Math.pow(egg.x - m.x, 2) + Math.pow(egg.y - m.y, 2) + Math.pow(egg.z - m.z, 2));
+            const error = Math.abs(dist - m.r);
+            if (error < 6) { // Tolerance 6 bloků
+                support++;
+                totalError += error;
+            }
+        });
+
+        if (support > 0) {
+            candidates.push({
+                ...egg,
+                confidence: support,
+                quality: Math.max(0, 100 - Math.round(totalError / support * 10))
+            });
+        }
+    });
+
+    candidates.sort((a, b) => (b.confidence * 1000 + b.quality) - (a.confidence * 1000 + a.quality));
+    intersections = candidates.slice(0, 20); // Top 20 shod
 }
 
 function updateUI() {
     countSpan.textContent = measurements.length;
     tableBody.innerHTML = '';
-    measurements.sort((a,b)=>b.timestamp-a.timestamp).forEach(m => {
+    [...measurements].sort((a,b)=>b.timestamp-a.timestamp).forEach(m => {
         const tr = document.createElement('tr');
         tr.onmouseenter = () => highlightMeasurement(m.id);
         tr.onmouseleave = () => resetHighlight();
@@ -262,13 +227,13 @@ function updateUI() {
     intersections.forEach(p => {
         const tr = document.createElement('tr');
         const color = getConfidenceColor(p.confidence);
-        tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${p.x},${p.z})">${p.x} / ${p.y} / ${p.z}</span><div style="font-size: 0.6rem; color: #94a3b8">Kvalita: ${p.quality}%</div></td><td><span class="badge" style="color:${color}">${p.confidence}</span></td><td><button class="btn-primary" style="padding:4px 8px; font-size:0.7rem" onclick="confirmEgg(${p.x},${p.y},${p.z})">Ok</button></td>`;
+        tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${p.x},${p.z})">${p.x} / ${p.y} / ${p.z}</span><div style="font-size: 0.6rem; color: #94a3b8">Shoda: ${p.quality}%</div></td><td><span class="badge" style="color:${color}">${p.confidence}x</span></td><td><button class="btn-primary" style="padding:4px 8px; font-size:0.7rem" onclick="confirmEgg(${p.x},${p.y},${p.z})">Ok</button></td>`;
         targetsTableBody.appendChild(tr);
     });
     confirmedTableBody.innerHTML = '';
     confirmedEggs.forEach(e => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${e.x},${e.z})">${Math.round(e.x)} / ${Math.round(e.y)} / ${Math.round(e.z)}</span></td><td><button class="btn-del-small" onclick="deleteEgg('${e.id}')">✕</button></td>`;
+        tr.innerHTML = `<td><span class="mono clickable" onclick="focusOnPoint(${e.x},${e.z})">${Math.round(e.x)} / ${Math.round(e.y)} / ${Math.round(e.z)}</span></td><td><button class="btn-del-small" onclick="deleteEgg('${e.id}', '${e.date}')">✕</button></td>`;
         confirmedTableBody.appendChild(tr);
     });
 }
@@ -276,7 +241,6 @@ function updateUI() {
 function renderSVG() {
     layers.grid.innerHTML = '';
     const step = 50;
-    // NÁVRAT: Mřížka pouze v oblasti 0-400
     for (let i = 0; i <= 400; i += step) {
         const vLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
         vLine.setAttribute("x1", i); vLine.setAttribute("y1", 0); vLine.setAttribute("x2", i); vLine.setAttribute("y2", 400);
@@ -292,10 +256,9 @@ function renderSVG() {
     poolLocations.forEach(p => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         c.setAttribute("cx", toCoord(p.x)); c.setAttribute("cy", toCoord(p.z));
-        c.setAttribute("r", 2);
-        c.style.fill = "rgba(148, 163, 184, 0.3)";
-        c.style.stroke = "rgba(148, 163, 184, 0.5)";
-        c.style.strokeWidth = "0.5";
+        c.setAttribute("r", 1.5);
+        c.style.fill = "rgba(148, 163, 184, 0.2)";
+        c.style.stroke = "none";
         c.onmouseenter = (e) => showPoolTooltip(e, p);
         c.onmouseleave = hideTooltip;
         layers.pool.appendChild(c);
@@ -320,67 +283,68 @@ function renderSVG() {
     });
     layers.intersections.innerHTML = '';
     intersections.forEach(p => {
-        const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        c.setAttribute("cx", toCoord(p.x)); c.setAttribute("cy", toCoord(p.z));
-        c.setAttribute("r", 3); c.setAttribute("class", "svg-poi-point");
-        c.style.fill = getConfidenceColor(p.confidence);
-        c.onmouseenter = (e) => showTooltip(e, p);
-        c.onmouseleave = hideTooltip;
-        layers.intersections.appendChild(c);
-    });
-    confirmedEggs.forEach(e => {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        c.setAttribute("cx", toCoord(e.x)); c.setAttribute("cy", toCoord(e.z));
-        c.setAttribute("r", 4); // Zmenšeno z 10
-        c.style.fill = "#fbbf24"; c.style.stroke = "#fff"; c.style.strokeWidth = "1"; // Zmenšen stroke
+        c.setAttribute("cx", toCoord(p.x)); c.setAttribute("cy", toCoord(p.z));
+        c.setAttribute("r", 4 + p.confidence);
+        c.style.fill = getConfidenceColor(p.confidence);
+        c.style.stroke = "white";
+        c.style.strokeWidth = "1";
+        
         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        text.setAttribute("x", toCoord(e.x)-3); text.setAttribute("y", toCoord(e.z)+3); // Posunuto pro menší ikonu
-        text.setAttribute("font-size", "6"); text.textContent = "🥚"; // Zmenšeno z 10
+        text.setAttribute("x", toCoord(p.x)-3); text.setAttribute("y", toCoord(p.z)+3);
+        text.setAttribute("font-size", "6"); text.textContent = "🥚";
+        
+        g.style.cursor = "pointer";
+        g.onmouseenter = (e) => showTooltip(e, p);
+        g.onmouseleave = hideTooltip;
+        
         g.appendChild(c); g.appendChild(text);
         layers.intersections.appendChild(g);
     });
 }
 
 // --- GLOBÁLNÍ FUNKCE ---
-window.deleteMeasurement = (id) => remove(ref(db, `measurements/${getCurrentDateStr()}/${id}`));
-window.deleteAllMeasurements = async () => { if(confirm("Opravdu smazat všechna měření pro dnešek?")) await remove(ref(db, `measurements/${getCurrentDateStr()}`)); };
-window.deleteEgg = (id) => remove(ref(db, `confirmed_eggs/${getCurrentDateStr()}/${id}`));
-window.confirmEgg = async (x, y, z) => { const dateStr = getCurrentDateStr(); await push(ref(db, `confirmed_eggs/${dateStr}`), { x: Math.round(x), y: Math.round(y), z: Math.round(z), timestamp: Date.now() }); };
-window.addManualEgg = async () => { const x = document.getElementById('conf-x').value; const y = document.getElementById('conf-y').value; const z = document.getElementById('conf-z').value; if (x && y && z) { await window.confirmEgg(x, y, z); document.getElementById('conf-x').value = ''; document.getElementById('conf-y').value = ''; document.getElementById('conf-z').value = ''; } };
-
-function getSphereIntersections(p1, p2, p3) {
-    const P1={x:p1.x,y:p1.y||0,z:p1.z}, P2={x:p2.x,y:p2.y||0,z:p2.z}, P3={x:p3.x,y:p3.y||0,z:p3.z}, r1=p1.r, r2=p2.r, r3=p3.r;
-    const sub=(v1,v2)=>({x:v1.x-v2.x,y:v1.y-v2.y,z:v1.z-v2.z}), dot=(v1,v2)=>v1.x*v2.x+v1.y*v2.y+v1.z*v2.z, mag=(v)=>Math.sqrt(dot(v,v)), div=(v,s)=>({x:v.x/s,y:v.y/s,z:v.z/s}), mul=(v,s)=>({x:v.x*s,y:v.y*s,z:v.z*s}), add=(v1,v2)=>({x:v1.x+v2.x,y:v1.y+v2.y,z:v1.z+v2.z}), cross=(v1,v2)=>({x:v1.y*v2.z-v1.z*v2.y,y:v1.z*v2.x-v1.x*v2.z,z:v1.x*v2.y-v1.y*v2.x});
-    const d_vec=sub(P2,P1); const d=mag(d_vec); if(d<0.1) return null;
-    const ex=div(d_vec,d); const p3p1=sub(P3,P1); const i=dot(ex,p3p1); const ey_vec=sub(p3p1,mul(ex,i)); const j=mag(ey_vec); if(j<0.5) return null;
-    const ey=div(ey_vec,j); const ez=cross(ex,ey); const x=(r1*r1-r2*r2+d*d)/(2*d); const y=(r1*r1-r3*r3+i*i+j*j)/(2*j)-(i/j)*x;
-    const zSq=r1*r1-x*x-y*y; if(zSq<-100) return null; const z=Math.sqrt(Math.max(0,zSq)); const base=add(P1,add(mul(ex,x),mul(ey,y))); return [add(base,mul(ez,z)),sub(base,mul(ez,z))];
-}
+window.deleteMeasurement = (id) => { 
+    measurements = measurements.filter(m => m.id !== id);
+    processAll();
+};
+window.deleteAllMeasurements = () => { 
+    if(confirm("Smazat lokální měření?")) {
+        measurements = [];
+        processAll();
+    }
+};
+window.deleteEgg = (id, date) => {
+    if(confirm("Opravdu smazat toto vejce z globální databáze?")) {
+        remove(ref(db, `confirmed_eggs/${date}/${id}`));
+    }
+};
+window.confirmEgg = async (x, y, z) => { 
+    const dateStr = getCurrentDateStr(); 
+    await push(ref(db, `confirmed_eggs/${dateStr}`), { x: Math.round(x), y: Math.round(y), z: Math.round(z), timestamp: Date.now() }); 
+};
+window.addManualEgg = async () => { 
+    const x = document.getElementById('conf-x').value; 
+    const y = document.getElementById('conf-y').value; 
+    const z = document.getElementById('conf-z').value; 
+    if (x && y && z) { 
+        await window.confirmEgg(x, y, z); 
+        document.getElementById('conf-x').value = ''; 
+        document.getElementById('conf-y').value = ''; 
+        document.getElementById('conf-z').value = ''; 
+    } 
+};
 
 function showTooltip(e, p) {
-    const nearestPool = poolLocations.length > 0 ? poolLocations.reduce((prev, curr) => {
-        const distPrev = Math.sqrt(Math.pow(p.x-prev.x,2)+Math.pow(p.z-prev.z,2));
-        const distCurr = Math.sqrt(Math.pow(p.x-curr.x,2)+Math.pow(p.z-curr.z,2));
-        return (distCurr < distPrev) ? curr : prev;
-    }, poolLocations[0]) : null;
-
-    let poolMatch = "";
-    if (nearestPool) {
-        const dist = Math.sqrt(Math.pow(p.x-nearestPool.x,2)+Math.pow(p.z-nearestPool.z,2));
-        if (dist < 10) {
-            poolMatch = `<br><span style="color:var(--success)">Poblíž známé lokace: ${nearestPool.x} / ${nearestPool.y} / ${nearestPool.z}</span>`;
-        }
-    }
-
     hoverInfo.style.display = 'block';
-    hoverInfo.innerHTML = `<strong>Průsečík</strong><br>X: ${p.x}<br>Y: ${p.y}<br>Z: ${p.z}<br><small>Kvalita: ${p.quality}%</small>${poolMatch}`;
+    hoverInfo.innerHTML = `<strong>Potenciální shoda</strong><br>X: ${p.x}<br>Y: ${p.y}<br>Z: ${p.z}<br><small>Shoda: ${p.quality}%</small><br><small>Podpořeno ${p.confidence} měřeními</small>`;
     moveTooltip(e);
 }
 
 function showPoolTooltip(e, p) {
     hoverInfo.style.display = 'block';
-    hoverInfo.innerHTML = `<strong>Známá lokace</strong><br>X: ${p.x}<br>Y: ${p.y}<br>Z: ${p.z}`;
+    hoverInfo.innerHTML = `<strong>Možná lokace (Pool)</strong><br>X: ${p.x}<br>Y: ${p.y}<br>Z: ${p.z}`;
     moveTooltip(e);
 }
 
@@ -398,9 +362,19 @@ function moveTooltip(e) {
 function hideTooltip() { hoverInfo.style.display = 'none'; }
 window.focusOnPoint = (x, z) => { viewState.zoom = 2; viewState.x = 200 - (x+OFFSET)*2; viewState.y = 200 - (z+OFFSET)*2; updateViewTransformation(); };
 
-form.onsubmit = async (e) => { e.preventDefault(); const dateStr = getCurrentDateStr(); await push(ref(db, `measurements/${dateStr}`), { x: parseFloat(xInput.value), y: parseFloat(yInput.value), z: parseFloat(zInput.value), r: parseFloat(rInput.value), timestamp: Date.now() }); form.reset(); };
+form.onsubmit = (e) => { 
+    e.preventDefault(); 
+    const newM = { 
+        id: "loc_" + Date.now(),
+        x: parseFloat(xInput.value), 
+        y: parseFloat(yInput.value), 
+        z: parseFloat(zInput.value), 
+        r: parseFloat(rInput.value), 
+        timestamp: Date.now() 
+    };
+    measurements.push(newM);
+    form.reset(); 
+    processAll();
+};
 
-loadPoolLocations().then(() => {
-    loadData();
-    setInterval(loadData, 60000);
-});
+loadData();
